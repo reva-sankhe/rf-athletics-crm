@@ -1,0 +1,105 @@
+Build a football team CRM for Bombay Gymkhana Women's Football — "BG Women's Football CRM"
+Context
+Internal tool for coaches to track players and fitness tests across two squads — Sharks and Wildcats. Clean, minimal, professional. No clutter.
+
+Tech Stack
+
+React + Vite
+Supabase (project URL and anon key from env vars VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY)
+React Router
+Tailwind CSS
+Tremor for charts
+No auth for now
+
+
+Design System
+Colours:
+
+Background: #0a0a0a
+Surface/cards: #111111 and #1a1a1a
+Primary accent: Indigo #4F46E5
+Highlight: Yellow #EAB308 — sparingly, only for standout metrics
+Text primary: #FFFFFF
+Text secondary: #9CA3AF
+Borders: 1px solid #222222
+
+Typography:
+
+Font: Geist
+Numbers and times: monospace
+
+General UI rules:
+
+No gradients, no heavy shadows
+Each category (position, tier, age group) gets one consistent colour palette — don't mix palettes across categories
+All Broncho times display as M:SS (e.g. 6.25 → 6:15). Use a single shared formatting function everywhere.
+Sidebar navigation
+Full width, max container 1400px
+Mobile responsive
+
+
+Supabase Schema
+players: id (uuid), code (text), name (text), primary_position (text), secondary_position (text), age (int), year_of_birth (int), age_range (text — U18/18-24/25+), team (text — Sharks/Wildcats), is_active (boolean), created_at
+test_sessions: id (uuid), test_date (date), test_name (text), notes (text), created_at
+test_results: id (uuid), session_id (uuid → test_sessions), player_id (uuid → players), bronco_mins (float), mas_ms (float), seconds (int), ten_m_1, ten_m_2, twenty_m_1, twenty_m_2, forty_m_1, forty_m_2, eighty_m_runs, sixty_m_runs, forty_m_runs (all float), notes (text), created_at
+
+Fitness benchmark tiers (female athletes, based on MAS m/s)
+
+World Record: > 4.5
+Elite Pro: 4.3 – 4.5
+Outstanding: 4.1 – 4.3
+Very Good: 3.9 – 4.1
+Good: 3.7 – 3.9
+Average: 3.5 – 3.7
+Below Average: < 3.5
+
+
+Pages
+1. Dashboard (/)
+
+Sharks / Wildcats team switcher
+Key metric cards: total active players, avg Broncho (latest session), most improved player, players not yet tested this session
+Team avg Broncho over time (line chart)
+Tier distribution (bar chart)
+
+2. Players (/players)
+
+Team switcher + add player button
+Searchable, filterable table (position, age group, active/inactive)
+Add player modal: name, code, primary position, secondary position, year of birth, team
+
+3. Player card (/players/:id)
+
+Player info with edit
+Latest fitness stats
+Broncho over time chart
+Full test history
+
+4. Fitness Tests (/fitness)
+
+List of all test sessions
+New test session flow:
+
+Enter date and name
+Upload CSV or manual entry. CSV columns: code, name, bronco_mins, ten_m_1, ten_m_2, twenty_m_1, twenty_m_2, forty_m_1, forty_m_2, notes
+Preview with matched (green) and unmatched (red) players before saving
+Confirm saves to Supabase
+
+
+
+5. Analytics (/analytics)
+
+Team switcher persisted across all pages
+
+Four tabs:
+Progress — line chart of team avg Broncho over time. Table: each player, their result per session, change in seconds, % change, trend.
+By position — grouped bar chart avg Broncho per position per session. Summary table: position, avg Jan, avg Mar, change.
+By age group — same structure as position tab but for U18 / 18-24 / 25+
+Benchmarks — horizontal bar chart of every player's MAS sorted best to worst, bars colour coded by tier, dashed vertical lines at tier thresholds. Table: each player, their MAS, their tier.
+
+General
+
+Loading skeletons on all tables and charts
+Empty states with helpful messages
+Toast notifications for errors and success actions
+Team switcher state persists across navigation
