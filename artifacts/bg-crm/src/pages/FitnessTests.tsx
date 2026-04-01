@@ -63,6 +63,7 @@ export default function FitnessTests() {
   // Session details (not saved until confirm)
   const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
   const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState("");
 
   // Data entry state
   const [csvText, setCsvText] = useState("");
@@ -121,7 +122,7 @@ export default function FitnessTests() {
   const handleConfirm = async () => {
     setSubmitting(true);
     try {
-      const session = await createSession({ test_date: newDate, test_name: newName, notes: null });
+      const session = await createSession({ test_date: newDate, test_name: newName, type: newType.trim() || null, notes: null });
 
       const results: Omit<TestResult, "id" | "created_at">[] = matched
         .filter((m) => m.player !== null)
@@ -148,6 +149,7 @@ export default function FitnessTests() {
       setStep("list");
       setNewName("");
       setNewDate(new Date().toISOString().split("T")[0]);
+      setNewType("");
       setCsvText("");
       setManualRows([{ code: "", name: "" }]);
     } catch (err: unknown) {
@@ -161,6 +163,7 @@ export default function FitnessTests() {
     setStep("list");
     setNewName("");
     setNewDate(new Date().toISOString().split("T")[0]);
+    setNewType("");
     setCsvText("");
     setManualRows([{ code: "", name: "" }]);
   };
@@ -181,6 +184,12 @@ export default function FitnessTests() {
               <label className="block text-xs text-muted-foreground mb-1">Session Name</label>
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Pre-season Test 1"
                 className="w-full bg-muted border border-border rounded px-3 py-1.5 text-sm text-foreground" data-testid="input-session-name" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Test Type <span className="text-muted-foreground/50">(optional)</span></label>
+              <input value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="e.g. Broncho, Sprint, Agility"
+                className="w-full bg-muted border border-border rounded px-3 py-1.5 text-sm text-foreground" data-testid="input-session-type" />
+              <p className="text-[11px] text-muted-foreground mt-1">Sessions of the same type will be compared together in Analytics.</p>
             </div>
             <div className="flex gap-2 pt-2">
               <button type="button" onClick={handleCancel} className="flex-1 px-4 py-2 border border-border rounded-md text-sm text-muted-foreground">Cancel</button>
@@ -328,6 +337,7 @@ export default function FitnessTests() {
                 <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="px-4 py-2.5 text-left font-medium">Date</th>
                   <th className="px-4 py-2.5 text-left font-medium">Session Name</th>
+                  <th className="px-4 py-2.5 text-left font-medium">Type</th>
                   <th className="px-4 py-2.5 text-left font-medium">Notes</th>
                 </tr>
               </thead>
@@ -336,6 +346,15 @@ export default function FitnessTests() {
                   <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30" data-testid={`row-session-${s.id}`}>
                     <td className="px-4 py-3 font-time text-muted-foreground text-xs">{s.test_date}</td>
                     <td className="px-4 py-3 font-medium text-foreground">{s.test_name}</td>
+                    <td className="px-4 py-3">
+                      {s.type ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                          {s.type}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/40">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">{s.notes ?? "—"}</td>
                   </tr>
                 ))}

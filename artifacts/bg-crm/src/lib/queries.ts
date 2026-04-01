@@ -54,7 +54,7 @@ export async function fetchResultsBySession(sessionId: string): Promise<TestResu
 export async function fetchResultsByPlayer(playerId: string): Promise<TestResult[]> {
   const { data, error } = await supabase
     .from("test_results")
-    .select("*, test_sessions(test_date, test_name)")
+    .select("*, test_sessions(test_date, test_name, type)")
     .eq("player_id", playerId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -64,7 +64,7 @@ export async function fetchResultsByPlayer(playerId: string): Promise<TestResult
 export async function fetchAllResults(): Promise<TestResult[]> {
   const { data, error } = await supabase
     .from("test_results")
-    .select("*, players(name, code, team, primary_position, age_range), test_sessions(test_date, test_name)")
+    .select("*, players(name, code, team, primary_position, age_range), test_sessions(test_date, test_name, type)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data as TestResult[];

@@ -16,6 +16,7 @@ export interface TestSession {
   id: string;
   test_date: string;
   test_name: string;
+  type: string | null;
   notes: string | null;
   created_at: string;
 }

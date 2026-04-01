@@ -17,7 +17,7 @@ export default function PlayerDetail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [player, setPlayer] = useState<Player | null>(null);
-  const [results, setResults] = useState<(TestResult & { test_sessions?: { test_date: string; test_name: string } })[]>([]);
+  const [results, setResults] = useState<(TestResult & { test_sessions?: { test_date: string; test_name: string; type: string | null } })[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Player>>({});
@@ -30,7 +30,7 @@ export default function PlayerDetail() {
     try {
       const [p, rs] = await Promise.all([fetchPlayer(id!), fetchResultsByPlayer(id!)]);
       setPlayer(p);
-      setResults(rs as (TestResult & { test_sessions?: { test_date: string; test_name: string } })[]);
+      setResults(rs as (TestResult & { test_sessions?: { test_date: string; test_name: string; type: string | null } })[]);
     } finally {
       setLoading(false);
     }
@@ -236,7 +236,16 @@ export default function PlayerDetail() {
                   {results.slice(historyPage * HISTORY_PAGE_SIZE, (historyPage + 1) * HISTORY_PAGE_SIZE).map((r) => (
                     <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30" data-testid={`row-result-${r.id}`}>
                       <td className="px-4 py-2.5 text-muted-foreground font-time text-xs">{r.test_sessions?.test_date ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-foreground">{r.test_sessions?.test_name ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-foreground">
+                        <div className="flex items-center gap-1.5">
+                          {r.test_sessions?.test_name ?? "—"}
+                          {r.test_sessions?.type && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                              {r.test_sessions.type}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-2.5 text-right font-time text-foreground">{formatBroncho(r.bronco_mins)}</td>
                       <td className="px-4 py-2.5 text-right font-time text-foreground">{r.mas_ms !== null ? r.mas_ms.toFixed(2) : "—"}</td>
                       <td className="px-4 py-2.5 text-right font-time text-muted-foreground">{r.ten_m_1 !== null ? r.ten_m_1.toFixed(2) + "s" : "—"}</td>

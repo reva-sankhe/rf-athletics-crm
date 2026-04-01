@@ -117,7 +117,7 @@ function TierStrip({ players: ps, results: rs }: { players: { player: Player; ma
 // ── Types ─────────────────────────────────────────────────────────────────
 interface EnrichedResult extends TestResult {
   players?: Pick<Player, "name" | "code" | "team" | "primary_position" | "age_range">;
-  test_sessions?: Pick<TestSession, "test_date" | "test_name">;
+  test_sessions?: Pick<TestSession, "test_date" | "test_name" | "type">;
 }
 
 const TABS = ["overview", "benchmarks", "players", "position", "age"] as const;
@@ -142,6 +142,7 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [posFilter, setPosFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,7 +157,21 @@ export default function Analytics() {
   useEffect(() => { load(); }, [load]);
 
   const teamResults = useMemo(() => results.filter((r) => r.players?.team === team), [results, team]);
-  const chronoSessions = useMemo(() => [...sessions].reverse(), [sessions]);
+
+  // Distinct non-null session types, sorted
+  const availableTypes = useMemo(() => {
+    const types = Array.from(new Set(sessions.map((s) => s.type).filter(Boolean) as string[])).sort();
+    return types;
+  }, [sessions]);
+
+  // Reset typeFilter if it no longer exists in current sessions
+  const validTypeFilter = availableTypes.includes(typeFilter) ? typeFilter : "all";
+
+  // All sessions chronologically, filtered by type when one is selected
+  const chronoSessions = useMemo(() => {
+    const sorted = [...sessions].reverse();
+    return validTypeFilter === "all" ? sorted : sorted.filter((s) => s.type === validTypeFilter);
+  }, [sessions, validTypeFilter]);
 
   // Per-player: first & latest bronco
   const playerComparisons = useMemo(() => {
@@ -211,8 +226,8 @@ export default function Analytics() {
     }).filter((x) => x.avg !== null);
   }, [chronoSessions, teamResults]);
 
-  // Metric strip values
-  const latestSession = sessions[0] ?? null;
+  // Metric strip values — based on type-filtered sessions
+  const latestSession = chronoSessions.length > 0 ? chronoSessions[chronoSessions.length - 1] : null;
   const latestResults = teamResults.filter((r) => r.session_id === latestSession?.id && r.bronco_mins !== null);
   const latestAvg = latestResults.length ? latestResults.reduce((a, r) => a + r.bronco_mins!, 0) / latestResults.length : null;
   const comparable = playerComparisons.filter((x) => x.diffSecs !== null);
@@ -242,6 +257,27 @@ export default function Analytics() {
         </div>
         <TeamSwitcher />
       </div>
+
+      {/* Type filter pills — only shown when there are typed sessions */}
+      {availableTypes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-5">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mr-1">Type</span>
+          {["all", ...availableTypes].map((t) => (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(t)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
+                validTypeFilter === t
+                  ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/30"
+                  : "text-muted-foreground border-transparent hover:border-border hover:text-foreground"
+              )}
+            >
+              {t === "all" ? "All types" : t}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Metric strip */}
       <div className="grid grid-cols-3 sm:grid-cols-6 border border-border rounded-2xl overflow-hidden divide-x divide-border mb-5 bg-card">
@@ -279,7 +315,9 @@ export default function Analytics() {
         <div className="space-y-4">
           {/* Per-player change chart */}
           <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">First → Latest change per player</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+              First → Latest change per player{validTypeFilter !== "all" ? ` · ${validTypeFilter} sessions` : ""}
+            </div>
             <div className="flex gap-4 mb-4 mt-2">
               {[["#34d399","Improved"], ["#f87171","Declined"], ["#fbbf24","Unchanged"]].map(([c, l]) => (
                 <div key={l} className="flex items-center gap-1.5 text-xs text-muted-foreground">
