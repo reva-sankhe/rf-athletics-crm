@@ -128,7 +128,7 @@ export default function Analytics() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-100">Analytics <span className="text-slate-500 font-normal">— {team}</span></h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">Analytics <span className="text-slate-400 dark:text-slate-500 font-normal">— {team}</span></h1>
         <TeamSwitcher />
       </div>
 

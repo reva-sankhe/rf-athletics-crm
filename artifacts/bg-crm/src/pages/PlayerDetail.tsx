@@ -110,7 +110,7 @@ export default function PlayerDetail() {
                 data-testid="input-edit-name"
               />
             ) : (
-              <h1 className="text-2xl font-bold tracking-tight text-slate-100">{player.name}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">{player.name}</h1>
             )}
             <div className="flex items-center gap-3 mt-1">
               <span className="font-time text-xs text-muted-foreground">{player.code}</span>

@@ -301,8 +301,8 @@ export default function FitnessTests() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">Fitness Tests</h1>
-          <p className="text-sm text-slate-600 mt-1">{sessions.length} session{sessions.length !== 1 ? "s" : ""}</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">Fitness Tests</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-600 mt-1">{sessions.length} session{sessions.length !== 1 ? "s" : ""}</p>
         </div>
         <button
           onClick={() => setStep("create-session")}
