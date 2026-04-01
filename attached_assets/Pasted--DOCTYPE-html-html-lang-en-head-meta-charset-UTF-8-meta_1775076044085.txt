@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sharks FC — Broncho Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f0e;
+    --bg2: #141614;
+    --bg3: #1a1d1a;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #eeecea;
+    --text2: #9a9892;
+    --text3: #5a5956;
+    --accent: #b5f23a;
+    --accent2: #7db82a;
+    --accent-dim: rgba(181,242,58,0.12);
+    --red: #ff5a5a;
+    --red-dim: rgba(255,90,90,0.12);
+    --amber: #f0a832;
+    --amber-dim: rgba(240,168,50,0.12);
+    --blue: #5a9cf5;
+    --blue-dim: rgba(90,156,245,0.12);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  header {
+    padding: 2rem 2.5rem 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .logo-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .shark-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .logo-text span {
+    display: block;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .header-meta {
+    text-align: right;
+    font-size: 12px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    line-height: 1.8;
+  }
+
+  /* HERO STRIP */
+  .hero {
+    padding: 2rem 2.5rem 0;
+  }
+
+  .hero h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .hero-sub {
+    margin-top: 0.75rem;
+    font-size: 14px;
+    color: var(--text2);
+    max-width: 480px;
+    line-height: 1.6;
+  }
+
+  /* METRIC STRIP */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    margin: 2rem 2.5rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--border);
+  }
+
+  .metric {
+    background: var(--bg2);
+    padding: 1.25rem 1.5rem;
+    position: relative;
+  }
+
+  .metric-label {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 6px;
+  }
+
+  .metric-val {
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  .metric-val.accent { color: var(--accent); }
+  .metric-val.red { color: var(--red); }
+  .metric-val.amber { color: var(--amber); }
+
+  .metric-foot {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* TABS */
+  .tabs-wrap {
+    padding: 0 2.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 0.875rem 1.25rem;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text3);
+    background: none;
+    border: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .tab:hover { color: var(--text2); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+
+  /* MAIN CONTENT */
+  .main { padding: 2rem 2.5rem; }
+
+  .section { display: none; }
+  .section.visible { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .card-title {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 1.25rem;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+  @media (max-width: 700px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
+
+  /* TABLE */
+  .tbl-wrap { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--bg3); }
+
+  /* BADGES */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+  }
+  .badge-green { background: rgba(181,242,58,0.15); color: var(--accent); }
+  .badge-red { background: var(--red-dim); color: var(--red); }
+  .badge-amber { background: var(--amber-dim); color: var(--amber); }
+  .badge-gray { background: rgba(255,255,255,0.06); color: var(--text3); }
+  .badge-blue { background: var(--blue-dim); color: var(--blue); }
+
+  /* POS BADGE */
+  .pos {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px;
+    font-size: 10px; font-family: 'DM Mono', monospace; font-weight: 500;
+  }
+  .pos-F { background: rgba(255,90,90,0.15); color: var(--red); }
+  .pos-M { background: var(--blue-dim); color: var(--blue); }
+  .pos-D { background: var(--accent-dim); color: var(--accent); }
+  .pos-GK { background: var(--amber-dim); color: var(--amber); }
+
+  /* FILTER ROW */
+  .filter-row {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 1.25rem;
+  }
+  .filter-label { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; }
+  select {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 5px 10px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+  }
+
+  /* BAR ROWS */
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+  .bar-name { font-size: 12px; min-width: 130px; color: var(--text); }
+  .bar-bg { flex: 1; height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+  .bar-time { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--text2); min-width: 40px; text-align: right; }
+
+  /* BENCHMARK TIERS */
+  .bench-strip {
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .bench-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .bench-label { min-width: 140px; font-weight: 500; }
+  .bench-range { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text2); min-width: 100px; }
+  .bench-desc { font-size: 11px; color: var(--text3); }
+  .bench-count { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; }
+
+  /* PLAYER TIER DOTS */
+  .player-dots { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .dot {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-family: 'DM Mono', monospace;
+    cursor: default;
+    position: relative;
+  }
+  .dot:hover .dot-tip {
+    display: block;
+  }
+  .dot-tip {
+    display: none;
+    position: absolute;
+    bottom: 28px; left: 50%; transform: translateX(-50%);
+    background: #222;
+    color: var(--text);
+    font-size: 10px;
+    padding: 3px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 10;
+    border: 1px solid var(--border2);
+  }
+
+  /* CHART WRAP */
+  .chart-wrap { position: relative; width: 100%; }
+
+  /* LEGEND */
+  .legend { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* FOOTER */
+  footer {
+    text-align: center;
+    padding: 2rem;
+    font-size: 11px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .section.visible .card { animation: fadeUp 0.3s ease forwards; }
+  .section.visible .card:nth-child(2) { animation-delay: 0.05s; }
+  .section.visible .card:nth-child(3) { animation-delay: 0.1s; }
+
+  /* MOBILE */
+  @media (max-width: 600px) {
+    header, .hero, .metrics, .tabs-wrap, .main { padding-left: 1rem; padding-right: 1rem; }
+    .metrics { margin-left: 1rem; margin-right: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">
+    <div class="shark-icon">🦈</div>
+    <div class="logo-text"><span>Sharks FC</span>Broncho Analysis</div>
+  </div>
+  <div class="header-meta">
+    Jan 2026 → Mar 2026<br>
+    Broncho Endurance Test
+  </div>
+</header>
+
+<div class="hero">
+  <h1>Fitness <em>Progress</em><br>Report</h1>
+  <p class="hero-sub">Tracking endurance development across two test cycles. Benchmarked against female athlete standards.</p>
+</div>
+
+<div class="metrics" id="metricStrip"></div>
+
+<div class="tabs-wrap">
+  <button class="tab active" onclick="showTab('overview', this)">Overview</button>
+  <button class="tab" onclick="showTab('benchmark', this)">Benchmarks</button>
+  <button class="tab" onclick="showTab('players', this)">Players</button>
+  <button class="tab" onclick="showTab('position', this)">By position</button>
+  <button class="tab" onclick="showTab('age', this)">By age group</button>
+</div>
+
+<div class="main">
+  <div id="tab-overview" class="section visible"></div>
+  <div id="tab-benchmark" class="section"></div>
+  <div id="tab-players" class="section"></div>
+  <div id="tab-position" class="section"></div>
+  <div id="tab-age" class="section"></div>
+</div>
+
+<footer>Sharks FC · Broncho Fitness Dashboard · Jan–Mar 2026</footer>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const master = [
+  {code:'ZOYA',name:'Zoya',pos:'D',age:15,range:'U18'},
+  {code:'ANOUSHKA GANGWANI',name:'Anoushka G.',pos:'D',age:16,range:'U18'},
+  {code:'SANAA',name:'Sanaa',pos:'D',age:16,range:'U18'},
+  {code:'ADVIKA',name:'Advika',pos:'D',age:17,range:'U18'},
+  {code:'FATIMA',name:'Fatima',pos:'M',age:17,range:'U18'},
+  {code:'SHENAYA',name:'Shenaya',pos:'M',age:17,range:'U18'},
+  {code:'VORA',name:'Aanya Vora',pos:'M',age:17,range:'U18'},
+  {code:'ZAHRA',name:'Zahra',pos:'D',age:17,range:'U18'},
+  {code:'MAERA',name:'Maera',pos:'F',age:17,range:'U18'},
+  {code:'KIRTI',name:'Kirti',pos:'F',age:20,range:'18-24'},
+  {code:'SHAH',name:'Shah',pos:'M',age:21,range:'18-24'},
+  {code:'HANSIKA',name:'Hansika',pos:'F',age:22,range:'18-24'},
+  {code:'ISABELLE',name:'Isabelle',pos:'F',age:22,range:'18-24'},
+  {code:'KYRA',name:'Kyra',pos:'D',age:22,range:'18-24'},
+  {code:'SAMARA',name:'Samara',pos:'M',age:23,range:'18-24'},
+  {code:'DANNY',name:'Danny',pos:'D',age:24,range:'18-24'},
+  {code:'DENIESE',name:'Deniese',pos:'F',age:24,range:'18-24'},
+  {code:'IBREEZ',name:'Ibreez',pos:'D',age:24,range:'18-24'},
+  {code:'RITU',name:'Ritu',pos:'GK',age:24,range:'18-24'},
+  {code:'ANOKHI',name:'Anokhi',pos:'M',age:24,range:'18-24'},
+  {code:'SARAH',name:'Sarah',pos:'M',age:25,range:'25+'},
+  {code:'REVA',name:'Reva',pos:'M',age:25,range:'25+'},
+  {code:'ATIRIYA',name:'Atiriya',pos:'D',age:25,range:'25+'},
+  {code:'AYESHA',name:'Ayesha',pos:'F',age:26,range:'25+'},
+  {code:'SHVENA',name:'Shvena',pos:'D',age:26,range:'25+'},
+  {code:'POOJA',name:'Pooja',pos:'GK',age:26,range:'25+'},
+  {code:'GABBY',name:'Gabby',pos:'M',age:26,range:'25+'},
+  {code:'ZARASTYN',name:'Zarastyn',pos:'D',age:27,range:'25+'},
+  {code:'HIBA',name:'Hiba',pos:'M',age:31,range:'25+'},
+  {code:'ANAM',name:'Anam',pos:'D',age:31,range:'25+'},
+];
+
+const janData = {
+  'KIRTI':{bronco:6.03,mas:3.50,seconds:363},
+  'VORA':{bronco:6.10,mas:3.43,seconds:370},
+  'HIBA':{bronco:6.23,mas:3.31,seconds:383},
+  'GABBY':{bronco:6.45,mas:3.12,seconds:405},
+  'KYRA':{bronco:6.47,mas:3.10,seconds:407},
+  'SHENAYA':{bronco:6.49,mas:3.09,seconds:409},
+  'DENIESE':{bronco:6.52,mas:3.06,seconds:412},
+  'ZAHRA':{bronco:6.52,mas:3.06,seconds:412},
+  'PRIYANKA':{bronco:7.08,mas:2.94,seconds:428},
+  'SAMARA':{bronco:7.11,mas:2.92,seconds:431},
+  'REVA':{bronco:7.12,mas:2.91,seconds:432},
+  'ANISHEE':{bronco:7.18,mas:2.87,seconds:438},
+  'MIHIKA':{bronco:7.20,mas:2.86,seconds:440},
+  'MAERA':{bronco:7.20,mas:2.86,seconds:440},
+};
+
+const marData = {
+  'ANOUSHKA GANGWANI':{bronco:5.633,mas:3.78,seconds:338},
+  'AYESHA':{bronco:5.700,mas:3.73,seconds:342},
+  'SHVENA':{bronco:5.817,mas:3.65,seconds:349},
+  'POOJA':{bronco:5.850,mas:3.63,seconds:351},
+  'HIBA':{bronco:5.983,mas:3.54,seconds:359},
+  'ZARASTYN':{bronco:6.033,mas:3.51,seconds:362},
+  'KIRTI':{bronco:6.233,mas:3.39,seconds:374},
+  'KYRA':{bronco:6.250,mas:3.38,seconds:375},
+  'GABBY':{bronco:6.333,mas:3.34,seconds:380},
+  'SARAH':{bronco:6.333,mas:3.34,seconds:380},
+  'SHAH':{bronco:6.433,mas:3.28,seconds:386},
+  'REVA':{bronco:6.483,mas:3.25,seconds:389},
+  'DANNY':{bronco:6.567,mas:3.21,seconds:394},
+  'DENIESE':{bronco:6.617,mas:3.19,seconds:397},
+  'SAMARA':{bronco:6.667,mas:3.16,seconds:400},
+  'IBREEZ':{bronco:6.667,mas:3.16,seconds:400},
+  'ADVIKA':{bronco:6.933,mas:3.03,seconds:416},
+  'FATIMA':{bronco:7.000,mas:3.00,seconds:420},
+  'ANAM':{bronco:7.250,mas:2.89,seconds:435},
+  'RITU':{bronco:7.417,mas:2.83,seconds:445},
+  'ZOYA':{bronco:7.417,mas:2.83,seconds:445},
+  'MEERA':{bronco:7.617,mas:2.75,seconds:457},
+  'ANOKHI':{bronco:7.650,mas:2.74,seconds:459},
+  'SANAA':{bronco:7.800,mas:2.68,seconds:468},
+  'MAERA':{bronco:7.200,mas:2.86,seconds:432},
+  'ZAHRA':{bronco:6.850,mas:3.07,seconds:411},
+  'SHENAYA':{bronco:7.100,mas:2.96,seconds:426},
+  'VORA':{bronco:6.500,mas:3.23,seconds:390},
+};
+
+// Benchmark tiers (MAS m/s)
+const tiers = [
+  {label:'World Record',range:'< 4:26',masMin:4.5,masMax:99,color:'#b5f23a',desc:'Top 1% — professional athletes'},
+  {label:'Elite Pro',range:'4:26 – 4:36',masMin:4.3,masMax:4.5,color:'#5a9cf5',desc:'International & top-tier pro'},
+  {label:'Outstanding',range:'4:36 – 4:46',masMin:4.1,masMax:4.3,color:'#a78bfa',desc:'High-level competitive'},
+  {label:'Very Good',range:'4:46 – 4:56',masMin:3.9,masMax:4.1,color:'#f0a832',desc:'Competitive club/college'},
+  {label:'Good',range:'4:56 – 5:06',masMin:3.7,masMax:3.9,color:'#fb923c',desc:'Above average, suitable for competition'},
+  {label:'Average',range:'5:06 – 5:26',masMin:3.5,masMax:3.7,color:'#ff5a5a',desc:'Average fitness for team sports'},
+  {label:'Below Average',range:'> 5:26',masMin:0,masMax:3.5,color:'#6b7280',desc:'Needs improvement'},
+];
+
+function getTier(mas) {
+  if (!mas || mas <= 0) return null;
+  return tiers.find(t => mas >= t.masMin && mas < t.masMax) || tiers[tiers.length-1];
+}
+
+function fmtB(v) {
+  if (v == null) return '—';
+  const m = Math.floor(v);
+  const s = Math.round((v - m) * 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function getJ(code) { return janData[code] || null; }
+function getM(code) { return marData[code] || null; }
+
+// ── METRICS ──────────────────────────────────────────────────────────────────
+function buildMetrics() {
+  const sharksWithMar = master.filter(m => getM(m.code)?.bronco);
+  const sharksWithJan = master.filter(m => getJ(m.code)?.bronco);
+  const both = master.filter(m => getJ(m.code)?.bronco && getM(m.code)?.bronco);
+  const improved = both.filter(m => getM(m.code).bronco < getJ(m.code).bronco);
+  const avgJan = sharksWithJan.reduce((s,m) => s + getJ(m.code).bronco, 0) / sharksWithJan.length;
+  const avgMar = sharksWithMar.reduce((s,m) => s + getM(m.code).bronco, 0) / sharksWithMar.length;
+
+  document.getElementById('metricStrip').innerHTML = `
+    <div class="metric"><div class="metric-label">Squad (Sharks)</div><div class="metric-val">${master.length}</div><div class="metric-foot">registered players</div></div>
+    <div class="metric"><div class="metric-label">Tested both</div><div class="metric-val accent">${both.length}</div><div class="metric-foot">Jan + Mar</div></div>
+    <div class="metric"><div class="metric-label">Avg bronco Jan</div><div class="metric-val">${fmtB(avgJan)}</div><div class="metric-foot">team mean</div></div>
+    <div class="metric"><div class="metric-label">Avg bronco Mar</div><div class="metric-val">${fmtB(avgMar)}</div><div class="metric-foot">team mean</div></div>
+    <div class="metric"><div class="metric-label">Improved</div><div class="metric-val accent">${improved.length}</div><div class="metric-foot">of ${both.length} comparable</div></div>
+    <div class="metric"><div class="metric-label">Declined</div><div class="metric-val red">${both.length - improved.length}</div><div class="metric-foot">of ${both.length} comparable</div></div>
+  `;
+}
+
+// ── OVERVIEW ─────────────────────────────────────────────────────────────────
+function buildOverview() {
+  const both = master.filter(m => getJ(m.code)?.bronco && getM(m.code)?.bronco);
+  const sorted = [...both].sort((a,b) => (getJ(a.code).bronco - getM(a.code).bronco) - (getJ(b.code).bronco - getM(b.code).bronco));
+
+  document.getElementById('tab-overview').innerHTML = `
+    <div class="card">
+      <div class="card-title">Jan → Mar change per player (mins, negative = improved)</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:#b5f23a;"></div>Improved</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#ff5a5a;"></div>Declined</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#f0a832;"></div>Unchanged</div>
+      </div>
+      <div class="chart-wrap" style="height:${sorted.length*30+60}px;">
+        <canvas id="overviewChart"></canvas>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Team avg bronco over time</div>
+        <div class="chart-wrap" style="height:200px;"><canvas id="avgChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">MAS distribution (Mar)</div>
+        <div class="chart-wrap" style="height:200px;"><canvas id="masChart"></canvas></div>
+      </div>
+    </div>`;
+
+  const colors = sorted.map(m => {
+    const d = getJ(m.code).bronco - getM(m.code).bronco;
+    return d > 0.05 ? '#b5f23a' : d < -0.05 ? '#ff5a5a' : '#f0a832';
+  });
+
+  new Chart(document.getElementById('overviewChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(m => m.name),
+      datasets: [{ data: sorted.map(m => parseFloat((getJ(m.code).bronco - getM(m.code).bronco).toFixed(2))), backgroundColor: colors, borderRadius: 3 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.raw > 0 ? `${ctx.raw.toFixed(2)} min better` : `${Math.abs(ctx.raw).toFixed(2)} min worse` } } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#5a5956', font: { size: 11 } }, border: { color: 'rgba(255,255,255,0.08)' } },
+        y: { ticks: { color: '#9a9892', font: { size: 11 } }, grid: { display: false }, border: { color: 'rgba(255,255,255,0.08)' } }
+      }
+    }
+  });
+
+  const positions = ['F','M','D','GK'];
+  const posColors = { F:'#ff5a5a', M:'#5a9cf5', D:'#b5f23a', GK:'#f0a832' };
+  const janSharks = master.filter(m => getJ(m.code)?.bronco);
+  const marSharks = master.filter(m => getM(m.code)?.bronco);
+  const avgJ = janSharks.reduce((s,m)=>s+getJ(m.code).bronco,0)/janSharks.length;
+  const avgM = marSharks.reduce((s,m)=>s+getM(m.code).bronco,0)/marSharks.length;
+
+  new Chart(document.getElementById('avgChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Jan 2026','Mar 2026'],
+      datasets: [{ data: [parseFloat(avgJ.toFixed(2)), parseFloat(avgM.toFixed(2))], backgroundColor: ['rgba(181,242,58,0.3)','#b5f23a'], borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmtB(ctx.raw) } } },
+      scales: {
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#5a5956', font: { size: 11 }, callback: v => fmtB(v) }, border: { color: 'rgba(255,255,255,0.08)' }, min: 6, max: 7.5 },
+        x: { ticks: { color: '#9a9892', font: { size: 11 } }, grid: { display: false }, border: { color: 'rgba(255,255,255,0.08)' } }
+      }
+    }
+  });
+
+  const masValues = marSharks.map(m => getM(m.code).mas).filter(Boolean);
+  const masLabels = ['<3.0','3.0-3.2','3.2-3.4','3.4-3.6','3.6-3.8','3.8+'];
+  const masBreaks = [0,3.0,3.2,3.4,3.6,3.8,99];
+  const masCounts = masLabels.map((_, i) => masValues.filter(v => v >= masBreaks[i] && v < masBreaks[i+1]).length);
+
+  new Chart(document.getElementById('masChart'), {
+    type: 'bar',
+    data: {
+      labels: masLabels,
+      datasets: [{ data: masCounts, backgroundColor: '#5a9cf5', borderRadius: 3 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#5a5956', font: { size: 11 }, stepSize: 1 }, border: { color: 'rgba(255,255,255,0.08)' } },
+        x: { ticks: { color: '#9a9892', font: { size: 10 } }, grid: { display: false }, border: { color: 'rgba(255,255,255,0.08)' } }
+      }
+    }
+  });
+}
+
+// ── BENCHMARK ────────────────────────────────────────────────────────────────
+function buildBenchmark() {
+  const marSharks = master.filter(m => getM(m.code)?.mas && getM(m.code).mas > 0);
+
+  const tierRows = tiers.map(t => {
+    const players = marSharks.filter(m => getM(m.code).mas >= t.masMin && getM(m.code).mas < t.masMax);
+    const dots = players.map(p => `<div class="dot" style="background:${t.color}22; color:${t.color}; border:1px solid ${t.color}44;" title="${p.name} (${getM(p.code).mas.toFixed(2)} m/s)">${p.name.slice(0,2).toUpperCase()}<div class="dot-tip">${p.name} · ${getM(p.code).mas.toFixed(2)} m/s</div></div>`).join('');
+    return `<div class="bench-row" style="background:${t.color}0a; border:1px solid ${t.color}22;">
+      <div class="bench-label" style="color:${t.color};">${t.label}</div>
+      <div class="bench-range">${t.range}</div>
+      <div class="bench-desc">${t.desc}</div>
+      <div class="bench-count" style="color:${t.color};">${players.length}</div>
+    </div>
+    ${dots ? `<div class="player-dots" style="padding:0 10px 8px;">${dots}</div>` : ''}`;
+  }).join('');
+
+  // Build chart showing all players vs tiers
+  const sorted = [...marSharks].sort((a,b) => getM(b.code).mas - getM(a.code).mas);
+
+  document.getElementById('tab-benchmark').innerHTML = `
+    <div class="card">
+      <div class="card-title">Player MAS vs female athlete benchmarks (Mar 2026)</div>
+      <div class="chart-wrap" style="height:${sorted.length*26+80}px;"><canvas id="benchChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tier distribution — Sharks squad (Mar 2026)</div>
+      <div class="bench-strip">${tierRows}</div>
+    </div>`;
+
+  const barColors = sorted.map(m => getTier(getM(m.code).mas)?.color || '#6b7280');
+
+  const ctx = document.getElementById('benchChart').getContext('2d');
+
+  // Draw tier background zones as annotation-style horizontal bands using plugin
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(m => m.name),
+      datasets: [{
+        label: 'MAS (m/s)',
+        data: sorted.map(m => parseFloat(getM(m.code).mas.toFixed(3))),
+        backgroundColor: barColors,
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const tier = getTier(ctx.raw);
+              return `${ctx.raw.toFixed(2)} m/s — ${tier ? tier.label : 'Unknown'}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          min: 2.4, max: 4.8,
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#5a5956', font: { size: 10 } },
+          border: { color: 'rgba(255,255,255,0.08)' }
+        },
+        y: { ticks: { color: '#9a9892', font: { size: 11 } }, grid: { display: false }, border: { color: 'rgba(255,255,255,0.08)' } }
+      }
+    },
+    plugins: [{
+      afterDraw(chart) {
+        const {ctx, chartArea, scales} = chart;
+        tiers.forEach(t => {
+          if (t.masMax === 99) return;
+          const x = scales.x.getPixelForValue(t.masMin);
+          ctx.save();
+          ctx.strokeStyle = t.color + '55';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4,3]);
+          ctx.beginPath();
+          ctx.moveTo(x, chartArea.top);
+          ctx.lineTo(x, chartArea.bottom);
+          ctx.stroke();
+          ctx.fillStyle = t.color + 'aa';
+          ctx.font = '9px DM Mono, monospace';
+          ctx.fillText(t.label, x + 3, chartArea.top + 10);
+          ctx.restore();
+        });
+      }
+    }]
+  });
+}
+
+// ── PLAYERS ───────────────────────────────────────────────────────────────────
+function buildPlayers() {
+  let fPos = 'all', fRange = 'all';
+
+  function render() {
+    const rows = master.filter(m => {
+      if (fPos !== 'all' && m.pos !== fPos) return false;
+      if (fRange !== 'all' && m.range !== fRange) return false;
+      return true;
+    });
+
+    const tbody = rows.map(m => {
+      const j = getJ(m.code), mr = getM(m.code);
+      const jb = j?.bronco, mb = mr?.bronco;
+      let badge = '';
+      if (jb && mb) {
+        const d = jb - mb;
+        if (d > 0.05) badge = `<span class="badge badge-green">▲ ${d.toFixed(2)}</span>`;
+        else if (d < -0.05) badge = `<span class="badge badge-red">▼ ${Math.abs(d).toFixed(2)}</span>`;
+        else badge = `<span class="badge badge-amber">—</span>`;
+      } else badge = `<span class="badge badge-gray">no compare</span>`;
+
+      const tier = getTier(mr?.mas);
+      const tierBadge = tier ? `<span style="font-size:10px; color:${tier.color};">${tier.label}</span>` : '—';
+
+      return `<tr>
+        <td><span class="pos pos-${m.pos||'GK'}">${m.pos||'?'}</span></td>
+        <td style="font-weight:500;">${m.name}</td>
+        <td><span class="badge badge-gray">${m.range||'—'}</span></td>
+        <td style="font-family:'DM Mono',monospace;">${jb ? fmtB(jb) : '<span style="color:#5a5956;">—</span>'}</td>
+        <td style="font-family:'DM Mono',monospace;">${mb ? fmtB(mb) : '<span style="color:#5a5956;">—</span>'}</td>
+        <td style="font-family:'DM Mono',monospace; font-size:12px;">${mr?.mas > 0 ? mr.mas.toFixed(2) : '—'}</td>
+        <td>${tierBadge}</td>
+        <td>${badge}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('player-tbody').innerHTML = tbody;
+  }
+
+  document.getElementById('tab-players').innerHTML = `
+    <div class="filter-row">
+      <span class="filter-label">Position</span>
+      <select id="fpos" onchange="updatePlayerFilter()">
+        <option value="all">All</option><option>F</option><option>M</option><option>D</option><option>GK</option>
+      </select>
+      <span class="filter-label">Age group</span>
+      <select id="frange" onchange="updatePlayerFilter()">
+        <option value="all">All</option><option>U18</option><option>18-24</option><option>25+</option>
+      </select>
+    </div>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th></th><th>Player</th><th>Group</th>
+            <th>Jan bronco</th><th>Mar bronco</th>
+            <th>MAS (m/s)</th><th>Tier</th><th>Change</th>
+          </tr></thead>
+          <tbody id="player-tbody"></tbody>
+        </table>
+      </div>
+    </div>`;
+
+  window.updatePlayerFilter = () => {
+    fPos = document.getElementById('fpos').value;
+    fRange = document.getElementById('frange').value;
+    render();
+  };
+  render();
+}
+
+// ── POSITION ──────────────────────────────────────────────────────────────────
+function buildPosition() {
+  const positions = [
+    {key:'F',label:'Forwards',color:'#ff5a5a'},
+    {key:'M',label:'Midfielders',color:'#5a9cf5'},
+    {key:'D',label:'Defenders',color:'#b5f23a'},
+    {key:'GK',label:'Goalkeepers',color:'#f0a832'},
+  ];
+
+  const cards = positions.map(p => {
+    const inPos = master.filter(m => m.pos === p.key);
+    const janP = inPos.filter(m => getJ(m.code)?.bronco);
+    const marP = inPos.filter(m => getM(m.code)?.bronco);
+    const avgJ = janP.length ? janP.reduce((s,m)=>s+getJ(m.code).bronco,0)/janP.length : null;
+    const avgM = marP.length ? marP.reduce((s,m)=>s+getM(m.code).bronco,0)/marP.length : null;
+    const avgMas = marP.length ? marP.reduce((s,m)=>s+(getM(m.code).mas||0),0)/marP.length : null;
+
+    const bars = [...marP].sort((a,b)=>getM(a.code).bronco-getM(b.code).bronco).map(m =>
+      `<div class="bar-row">
+        <div class="bar-name">${m.name}</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${Math.min(100,(getM(m.code).bronco/9)*100).toFixed(1)}%; background:${p.color};"></div></div>
+        <div class="bar-time">${fmtB(getM(m.code).bronco)}</div>
+      </div>`
+    ).join('');
+
+    return `<div class="card">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:1rem;">
+        <span class="pos pos-${p.key}">${p.key}</span>
+        <span style="font-weight:500;">${p.label}</span>
+        <span style="margin-left:auto; font-size:11px; color:var(--text3);">${inPos.length} players</span>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:1rem; text-align:center;">
+        <div><div style="font-size:10px; color:var(--text3); margin-bottom:3px;">Avg Jan</div><div style="font-size:18px; font-weight:500; font-family:'DM Mono',monospace;">${avgJ?fmtB(avgJ):'—'}</div></div>
+        <div><div style="font-size:10px; color:var(--text3); margin-bottom:3px;">Avg Mar</div><div style="font-size:18px; font-weight:500; font-family:'DM Mono',monospace; color:${p.color};">${avgM?fmtB(avgM):'—'}</div></div>
+        <div><div style="font-size:10px; color:var(--text3); margin-bottom:3px;">Avg MAS</div><div style="font-size:18px; font-weight:500; font-family:'DM Mono',monospace;">${avgMas?avgMas.toFixed(2):'—'}</div></div>
+      </div>
+      ${bars}
+    </div>`;
+  }).join('');
+
+  document.getElementById('tab-position').innerHTML = `
+    <div class="card">
+      <div class="card-title">Avg bronco by position — Jan vs Mar</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(181,242,58,0.3);"></div>Jan</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#b5f23a;"></div>Mar</div>
+      </div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="posChart"></canvas></div>
+    </div>
+    <div class="grid-2">${cards}</div>`;
+
+  const posLabels = positions.map(p=>p.label);
+  const posAvgJ = positions.map(p => {
+    const d = master.filter(m=>m.pos===p.key && getJ(m.code)?.bronco);
+    return d.length ? parseFloat((d.reduce((s,m)=>s+getJ(m.code).bronco,0)/d.length).toFixed(2)) : null;
+  });
+  const posAvgM = positions.map(p => {
+    const d = master.filter(m=>m.pos===p.key && getM(m.code)?.bronco);
+    return d.length ? parseFloat((d.reduce((s,m)=>s+getM(m.code).bronco,0)/d.length).toFixed(2)) : null;
+  });
+
+  new Chart(document.getElementById('posChart'), {
+    type: 'bar',
+    data: {
+      labels: posLabels,
+      datasets: [
+        {label:'Jan',data:posAvgJ,backgroundColor:'rgba(181,242,58,0.25)',borderRadius:3},
+        {label:'Mar',data:posAvgM,backgroundColor:positions.map(p=>p.color),borderRadius:3},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>fmtB(ctx.raw)}}},
+      scales:{
+        y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#5a5956',font:{size:11},callback:v=>fmtB(v)},border:{color:'rgba(255,255,255,0.08)'},min:5.5,max:8},
+        x:{ticks:{color:'#9a9892',font:{size:11}},grid:{display:false},border:{color:'rgba(255,255,255,0.08)'}}
+      }
+    }
+  });
+}
+
+// ── AGE ────────────────────────────────────────────────────────────────────────
+function buildAge() {
+  const ranges = [
+    {key:'U18',label:'Under 18',color:'#ff5a5a'},
+    {key:'18-24',label:'18 – 24',color:'#5a9cf5'},
+    {key:'25+',label:'25 & over',color:'#b5f23a'},
+  ];
+
+  const cards = ranges.map(r => {
+    const inR = master.filter(m => m.range === r.key);
+    const janR = inR.filter(m => getJ(m.code)?.bronco);
+    const marR = inR.filter(m => getM(m.code)?.bronco);
+    const both = inR.filter(m => getJ(m.code)?.bronco && getM(m.code)?.bronco);
+    const avgJ = janR.length ? janR.reduce((s,m)=>s+getJ(m.code).bronco,0)/janR.length : null;
+    const avgM = marR.length ? marR.reduce((s,m)=>s+getM(m.code).bronco,0)/marR.length : null;
+    const imp = both.filter(m => getM(m.code).bronco < getJ(m.code).bronco).length;
+
+    const bars = [...marR].sort((a,b)=>getM(a.code).bronco-getM(b.code).bronco).map(m => {
+      const jb = getJ(m.code)?.bronco;
+      const mb = getM(m.code).bronco;
+      const arrow = jb ? (jb-mb > 0.05 ? ' <span style="color:#b5f23a;">▲</span>' : jb-mb < -0.05 ? ' <span style="color:#ff5a5a;">▼</span>' : '') : '';
+      return `<div class="bar-row">
+        <div class="bar-name">${m.name}${arrow}</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${Math.min(100,(mb/9)*100).toFixed(1)}%; background:${r.color};"></div></div>
+        <div class="bar-time">${fmtB(mb)}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:1rem;">
+        <span style="font-size:18px; font-weight:500; color:${r.color};">${r.label}</span>
+        <span style="margin-left:auto; font-size:11px; color:var(--text3);">${inR.length} players</span>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:1rem; text-align:center;">
+        <div><div style="font-size:10px; color:var(--text3); margin-bottom:3px;">Avg Jan</div><div style="font-size:18px; font-weight:500; font-family:'DM Mono',monospace;">${avgJ?fmtB(avgJ):'—'}</div></div>
+        <div><div style="font-size:10px; color:var(--text3); margin-bottom:3px;">Avg Mar</div><div style="font-size:18px; font-weight:500; font-family:'DM Mono',monospace; color:${r.color};">${avgM?fmtB(avgM):'—'}</div></div>
+        <div><div style="font-size:10px; color:var(--text3); margin-bottom:3px;">Improved</div><div style="font-size:18px; font-weight:500; color:#b5f23a;">${imp}/${both.length}</div></div>
+      </div>
+      ${bars}
+    </div>`;
+  }).join('');
+
+  document.getElementById('tab-age').innerHTML = `
+    <div class="card">
+      <div class="card-title">Avg bronco by age group — Jan vs Mar</div>
+      <div class="chart-wrap" style="height:200px;"><canvas id="ageChart"></canvas></div>
+    </div>
+    ${cards}`;
+
+  const ageAvgJ = ranges.map(r => {
+    const d = master.filter(m=>m.range===r.key && getJ(m.code)?.bronco);
+    return d.length ? parseFloat((d.reduce((s,m)=>s+getJ(m.code).bronco,0)/d.length).toFixed(2)) : null;
+  });
+  const ageAvgM = ranges.map(r => {
+    const d = master.filter(m=>m.range===r.key && getM(m.code)?.bronco);
+    return d.length ? parseFloat((d.reduce((s,m)=>s+getM(m.code).bronco,0)/d.length).toFixed(2)) : null;
+  });
+
+  new Chart(document.getElementById('ageChart'), {
+    type: 'bar',
+    data: {
+      labels: ranges.map(r=>r.label),
+      datasets: [
+        {label:'Jan',data:ageAvgJ,backgroundColor:'rgba(255,255,255,0.08)',borderRadius:3},
+        {label:'Mar',data:ageAvgM,backgroundColor:ranges.map(r=>r.color),borderRadius:3},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>fmtB(ctx.raw)}}},
+      scales:{
+        y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#5a5956',font:{size:11},callback:v=>fmtB(v)},border:{color:'rgba(255,255,255,0.08)'},min:5.5,max:8},
+        x:{ticks:{color:'#9a9892',font:{size:11}},grid:{display:false},border:{color:'rgba(255,255,255,0.08)'}}
+      }
+    }
+  });
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+window.showTab = function(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
+  el.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('visible');
+};
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+buildMetrics();
+buildOverview();
+buildBenchmark();
+buildPlayers();
+buildPosition();
+buildAge();
+</script>
+</body>
+</html>
