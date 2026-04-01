@@ -306,10 +306,10 @@ export default function FitnessTests() {
         </div>
         <button
           onClick={() => setStep("create-session")}
-          className="flex items-center gap-1.5 px-4 py-2 btn-primary text-white text-sm font-semibold rounded-xl"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-indigo-500/50 text-indigo-400 text-sm font-medium hover:bg-indigo-500/10 transition-colors"
           data-testid="button-new-session"
         >
-          <Plus size={14} />
+          <Plus size={13} />
           New Session
         </button>
       </div>
@@ -319,7 +319,7 @@ export default function FitnessTests() {
           <div className="p-4"><TableSkeleton rows={5} cols={4} /></div>
         ) : sessions.length === 0 ? (
           <EmptyState icon={Dumbbell} title="No sessions yet" description="Create a new test session to get started" action={
-            <button onClick={() => setStep("create-session")} className="flex items-center gap-1.5 px-4 py-2 btn-primary text-white text-sm font-semibold rounded-xl" data-testid="button-new-session-empty"><Plus size={14} />New Session</button>
+            <button onClick={() => setStep("create-session")} className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-indigo-500/50 text-indigo-400 text-sm font-medium hover:bg-indigo-500/10 transition-colors" data-testid="button-new-session-empty"><Plus size={13} />New Session</button>
           } />
         ) : (
           <div className="overflow-x-auto">
