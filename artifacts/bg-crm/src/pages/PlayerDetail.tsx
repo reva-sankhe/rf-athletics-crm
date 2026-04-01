@@ -1,0 +1,251 @@
+import { useEffect, useState, useCallback } from "react";
+import { useParams, useLocation } from "wouter";
+import { fetchPlayer, fetchResultsByPlayer, updatePlayer } from "@/lib/queries";
+import { formatBroncho, positionColor, ageRangeColor, cn } from "@/lib/utils";
+import { MasBadge } from "@/components/MasBadge";
+import { ChartSkeleton, TableSkeleton, Skeleton } from "@/components/Skeleton";
+import { EmptyState } from "@/components/EmptyState";
+import type { Player, TestResult } from "@/lib/types";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ArrowLeft, Edit, Save, X, Timer, Dumbbell } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+const POSITIONS = ["GK", "CB", "LB", "RB", "WB", "CDM", "CM", "CAM", "LW", "RW", "ST", "CF", "SS"];
+
+export default function PlayerDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [player, setPlayer] = useState<Player | null>(null);
+  const [results, setResults] = useState<(TestResult & { test_sessions?: { test_date: string; test_name: string } })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Player>>({});
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [p, rs] = await Promise.all([fetchPlayer(id!), fetchResultsByPlayer(id!)]);
+      setPlayer(p);
+      setResults(rs as (TestResult & { test_sessions?: { test_date: string; test_name: string } })[]);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const startEdit = () => {
+    if (!player) return;
+    setEditForm({ ...player });
+    setEditing(true);
+  };
+
+  const cancelEdit = () => setEditing(false);
+
+  const saveEdit = async () => {
+    if (!player) return;
+    setSaving(true);
+    try {
+      const updated = await updatePlayer(player.id, editForm);
+      setPlayer(updated);
+      setEditing(false);
+      toast({ title: "Player updated" });
+    } catch (err: unknown) {
+      toast({ title: "Failed to update", description: String(err), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const latestResult = results[0];
+
+  const chartData = [...results].reverse().map((r) => ({
+    date: r.test_sessions?.test_date ?? "",
+    session: r.test_sessions?.test_name ?? "",
+    mins: r.bronco_mins,
+    display: formatBroncho(r.bronco_mins),
+  }));
+
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-6 w-40" />
+        <div className="bg-card border border-border rounded-lg p-5 space-y-3">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4"><ChartSkeleton /></div>
+        <div className="bg-card border border-border rounded-lg p-4"><TableSkeleton /></div>
+      </div>
+    );
+  }
+
+  if (!player) {
+    return <EmptyState icon={Dumbbell} title="Player not found" action={<button onClick={() => setLocation("/players")} className="text-primary text-sm">Back to Players</button>} />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-2">
+        <button onClick={() => setLocation("/players")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="button-back">
+          <ArrowLeft size={14} />
+          Players
+        </button>
+      </div>
+
+      {/* Player info card */}
+      <div className="bg-card border border-border rounded-lg p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            {editing ? (
+              <input
+                value={editForm.name ?? ""}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="text-xl font-bold bg-muted border border-border rounded px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                data-testid="input-edit-name"
+              />
+            ) : (
+              <h1 className="text-xl font-bold text-foreground">{player.name}</h1>
+            )}
+            <div className="flex items-center gap-3 mt-1">
+              <span className="font-time text-xs text-muted-foreground">{player.code}</span>
+              <span className={cn("text-xs font-semibold", positionColor(player.primary_position))}>{player.primary_position}</span>
+              {player.secondary_position && <span className="text-xs text-muted-foreground">/ {player.secondary_position}</span>}
+              <span className={cn("text-xs font-medium", ageRangeColor(player.age_range))}>{player.age_range ?? "—"}</span>
+              <span className={cn("inline-flex px-2 py-0.5 rounded text-xs", player.is_active ? "bg-emerald-500/15 text-emerald-400" : "bg-muted text-muted-foreground")}>
+                {player.is_active ? "Active" : "Inactive"}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 text-sm border border-border rounded-md text-muted-foreground hover:text-foreground" data-testid="button-cancel-edit"><X size={13} />Cancel</button>
+                <button onClick={saveEdit} disabled={saving} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-primary text-white rounded-md font-semibold hover:bg-primary/90 disabled:opacity-60" data-testid="button-save-edit"><Save size={13} />{saving ? "Saving…" : "Save"}</button>
+              </>
+            ) : (
+              <button onClick={startEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-md text-muted-foreground hover:text-foreground transition-colors" data-testid="button-edit-player"><Edit size={13} />Edit</button>
+            )}
+          </div>
+        </div>
+
+        {editing && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t border-border">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Primary Position</label>
+              <select value={editForm.primary_position ?? ""} onChange={(e) => setEditForm({ ...editForm, primary_position: e.target.value })} className="w-full bg-muted border border-border rounded px-2 py-1.5 text-sm text-foreground">
+                {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Secondary Position</label>
+              <input value={editForm.secondary_position ?? ""} onChange={(e) => setEditForm({ ...editForm, secondary_position: e.target.value || null })} className="w-full bg-muted border border-border rounded px-2 py-1.5 text-sm text-foreground" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Year of Birth</label>
+              <input type="number" value={editForm.year_of_birth ?? ""} onChange={(e) => setEditForm({ ...editForm, year_of_birth: parseInt(e.target.value) || null })} className="w-full bg-muted border border-border rounded px-2 py-1.5 text-sm text-foreground" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Team</label>
+              <select value={editForm.team ?? "Sharks"} onChange={(e) => setEditForm({ ...editForm, team: e.target.value as "Sharks" | "Wildcats" })} className="w-full bg-muted border border-border rounded px-2 py-1.5 text-sm text-foreground">
+                <option value="Sharks">Sharks</option>
+                <option value="Wildcats">Wildcats</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 pt-4">
+              <input type="checkbox" id="edit_active" checked={editForm.is_active ?? true} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })} className="rounded border-border" />
+              <label htmlFor="edit_active" className="text-sm text-muted-foreground">Active</label>
+            </div>
+          </div>
+        )}
+
+        {/* Latest stats */}
+        {latestResult && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-border mt-4">
+            {[
+              { label: "Broncho", value: formatBroncho(latestResult.bronco_mins) },
+              { label: "MAS (m/s)", value: latestResult.mas_ms !== null ? latestResult.mas_ms.toFixed(2) : "—" },
+              { label: "10m Sprint 1", value: latestResult.ten_m_1 !== null ? latestResult.ten_m_1.toFixed(2) + "s" : "—" },
+              { label: "20m Sprint 1", value: latestResult.twenty_m_1 !== null ? latestResult.twenty_m_1.toFixed(2) + "s" : "—" },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <div className="text-xs text-muted-foreground mb-0.5">{label}</div>
+                <div className="text-lg font-bold font-time text-foreground">{value}</div>
+              </div>
+            ))}
+            <div className="sm:col-span-4 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Tier:</span>
+              <MasBadge mas={latestResult.mas_ms} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Broncho over time chart */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h2 className="text-sm font-semibold text-foreground mb-4">Broncho Over Time</h2>
+        {chartData.length === 0 ? (
+          <EmptyState icon={Timer} title="No test history" description="This player hasn't been tested yet" />
+        ) : (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+              <XAxis dataKey="date" tick={{ fill: "#9CA3AF", fontSize: 11 }} />
+              <YAxis tickFormatter={(v) => formatBroncho(v)} domain={["auto", "auto"]} tick={{ fill: "#9CA3AF", fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{ background: "#111", border: "1px solid #222", borderRadius: 6 }}
+                labelStyle={{ color: "#fff", fontSize: 12 }}
+                formatter={(v: number) => [formatBroncho(v), "Broncho"]}
+              />
+              <Line type="monotone" dataKey="mins" stroke="#4F46E5" strokeWidth={2} dot={{ fill: "#4F46E5", r: 4 }} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Full test history */}
+      <div className="bg-card border border-border rounded-lg">
+        <div className="px-4 py-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-foreground">Test History</h2>
+        </div>
+        {results.length === 0 ? (
+          <EmptyState icon={Dumbbell} title="No test results" description="No fitness tests recorded for this player" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="test-history-table">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="px-4 py-2.5 text-left font-medium">Date</th>
+                  <th className="px-4 py-2.5 text-left font-medium">Session</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Broncho</th>
+                  <th className="px-4 py-2.5 text-right font-medium">MAS</th>
+                  <th className="px-4 py-2.5 text-right font-medium">10m</th>
+                  <th className="px-4 py-2.5 text-right font-medium">20m</th>
+                  <th className="px-4 py-2.5 text-right font-medium">40m</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Tier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30" data-testid={`row-result-${r.id}`}>
+                    <td className="px-4 py-2.5 text-muted-foreground font-time text-xs">{r.test_sessions?.test_date ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-foreground">{r.test_sessions?.test_name ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-time text-foreground">{formatBroncho(r.bronco_mins)}</td>
+                    <td className="px-4 py-2.5 text-right font-time text-foreground">{r.mas_ms !== null ? r.mas_ms.toFixed(2) : "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-time text-muted-foreground">{r.ten_m_1 !== null ? r.ten_m_1.toFixed(2) + "s" : "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-time text-muted-foreground">{r.twenty_m_1 !== null ? r.twenty_m_1.toFixed(2) + "s" : "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-time text-muted-foreground">{r.forty_m_1 !== null ? r.forty_m_1.toFixed(2) + "s" : "—"}</td>
+                    <td className="px-4 py-2.5 text-right"><MasBadge mas={r.mas_ms} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
