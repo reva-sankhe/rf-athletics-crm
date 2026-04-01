@@ -201,8 +201,8 @@ export default function FitnessTests() {
           <p className="text-xs text-muted-foreground mb-4">Session: {newName} — {newDate}</p>
 
           <div className="flex gap-2 mb-4">
-            <button onClick={() => setUseManual(false)} className={`text-sm px-3.5 py-1.5 rounded-lg font-medium transition-all ${!useManual ? "bg-violet-600/30 text-violet-300 border border-violet-500/30" : "text-slate-500 hover:text-slate-300"}`} data-testid="button-tab-csv">CSV Upload</button>
-            <button onClick={() => setUseManual(true)} className={`text-sm px-3.5 py-1.5 rounded-lg font-medium transition-all ${useManual ? "bg-violet-600/30 text-violet-300 border border-violet-500/30" : "text-slate-500 hover:text-slate-300"}`} data-testid="button-tab-manual">Manual Entry</button>
+            <button onClick={() => setUseManual(false)} className={`text-sm px-3.5 py-1.5 rounded-lg font-medium transition-all ${!useManual ? "bg-indigo-50 dark:bg-indigo-600/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30" : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"}`} data-testid="button-tab-csv">CSV Upload</button>
+            <button onClick={() => setUseManual(true)} className={`text-sm px-3.5 py-1.5 rounded-lg font-medium transition-all ${useManual ? "bg-indigo-50 dark:bg-indigo-600/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30" : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"}`} data-testid="button-tab-manual">Manual Entry</button>
           </div>
 
           {!useManual ? (

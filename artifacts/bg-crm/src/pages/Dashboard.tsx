@@ -15,22 +15,19 @@ interface LatestData {
   results: (TestResult & { players: Pick<Player, "name" | "code" | "team"> })[];
 }
 
-function MetricCard({ title, value, sub, icon: Icon, highlight, accent }: { title: string; value: string | number; sub?: string; icon: React.ElementType; highlight?: boolean; accent?: string }) {
+function MetricCard({ title, value, sub, icon: _icon, highlight }: { title: string; value: string | number; sub?: string; icon?: React.ElementType; highlight?: boolean }) {
   return (
-    <div className={`bg-card border border-border rounded-2xl p-5 card-hover relative overflow-hidden`}>
+    <div className="bg-card border border-border rounded-2xl p-5 card-hover relative overflow-hidden">
       {highlight && (
-        <div className="absolute inset-0 bg-gradient-to-br from-violet-600/8 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/6 to-transparent pointer-events-none" />
       )}
-      <div className="flex items-start justify-between mb-4">
-        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.12em]">{title}</span>
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${highlight ? "bg-violet-500/20" : "bg-slate-100 dark:bg-white/[0.05]"}`}>
-          <Icon size={15} className={highlight ? "text-violet-400" : "text-slate-400 dark:text-slate-500"} />
-        </div>
+      <div className="mb-3">
+        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">{title}</span>
       </div>
-      <div className={`text-3xl font-bold tracking-tight ${highlight ? "text-violet-300" : "text-slate-100"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+      <div className={`text-3xl font-bold tracking-tight ${highlight ? "text-yellow-500 dark:text-yellow-400" : "text-slate-800 dark:text-slate-100"}`}>
         {value}
       </div>
-      {sub && <div className="text-[11px] text-slate-600 mt-1.5 font-medium">{sub}</div>}
+      {sub && <div className="text-[11px] text-slate-400 dark:text-slate-600 mt-1.5">{sub}</div>}
     </div>
   );
 }
@@ -153,10 +150,10 @@ export default function Dashboard() {
                 <Tooltip
                   contentStyle={{ background: "rgba(10,15,36,0.95)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, backdropFilter: "blur(12px)" }}
                   labelStyle={{ color: "#94a3b8", fontSize: 11 }}
-                  itemStyle={{ color: "#a78bfa" }}
+                  itemStyle={{ color: "#818cf8" }}
                   formatter={(v: number) => [formatBroncho(v), "Avg Broncho"]}
                 />
-                <Line type="monotone" dataKey="mins" stroke="#8b5cf6" strokeWidth={2.5} dot={{ fill: "#8b5cf6", r: 4, strokeWidth: 2, stroke: "rgba(139,92,246,0.3)" }} activeDot={{ r: 6, fill: "#8b5cf6" }} />
+                <Line type="monotone" dataKey="mins" stroke="#4f46e5" strokeWidth={2.5} dot={{ fill: "#4f46e5", r: 4, strokeWidth: 2, stroke: "rgba(79,70,229,0.3)" }} activeDot={{ r: 6, fill: "#4f46e5" }} />
               </LineChart>
             </ResponsiveContainer>
           )}
