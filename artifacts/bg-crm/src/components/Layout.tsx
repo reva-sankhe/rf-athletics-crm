@@ -11,6 +11,8 @@ const navItems = [
   { href: "/analytics", label: "Analytics" },
 ];
 
+const logoSrc = `${import.meta.env.BASE_URL}bg-logo.png`.replace(/\/\//g, "/");
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -59,14 +61,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const SidebarContent = ({ onNav }: { onNav?: () => void }) => (
     <div className="flex flex-col h-full">
       {/* Logo area */}
-      <div className="px-5 pt-6 pb-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className={cn("text-[10px] font-semibold uppercase tracking-[0.14em]", isDark ? "text-slate-500" : "text-slate-400")}>
-              Bombay Gymkhana
-            </div>
-            <div className={cn("text-base font-bold leading-tight mt-0.5", isDark ? "text-white" : "text-slate-900")}>
-              Women's Football
+      <div className="px-4 pt-5 pb-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src={logoSrc}
+              alt="Bombay Gymkhana"
+              className={cn(
+                "w-10 h-10 object-contain shrink-0",
+                !isDark && "brightness-75"
+              )}
+            />
+            <div className="min-w-0">
+              <div className={cn("text-[10px] font-semibold uppercase tracking-[0.14em] truncate", isDark ? "text-slate-500" : "text-slate-400")}>
+                Bombay Gymkhana
+              </div>
+              <div className={cn("text-sm font-bold leading-tight truncate", isDark ? "text-white" : "text-slate-900")}>
+                Women's Football
+              </div>
             </div>
           </div>
           <ThemeToggle />
@@ -109,9 +121,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         "lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 border-b bg-sidebar",
         isDark ? "border-white/[0.06]" : "border-slate-200"
       )}>
-        <span className={cn("text-sm font-bold", isDark ? "text-white" : "text-slate-900")}>
-          BG Women's Football
-        </span>
+        <div className="flex items-center gap-2.5">
+          <img
+            src={logoSrc}
+            alt="Bombay Gymkhana"
+            className={cn("w-8 h-8 object-contain", !isDark && "brightness-75")}
+          />
+          <span className={cn("text-sm font-bold", isDark ? "text-white" : "text-slate-900")}>
+            Women's Football
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <button
