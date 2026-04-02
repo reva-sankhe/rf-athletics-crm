@@ -321,7 +321,7 @@ function SessionDetail({
   const addCandidates = useMemo(() => {
     const q = addSearch.trim().toLowerCase();
     return allPlayers
-      .filter((p) => !participantIds.has(p.id))
+      .filter((p) => p.is_active && !participantIds.has(p.id))
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allPlayers, participantIds, addSearch]);
