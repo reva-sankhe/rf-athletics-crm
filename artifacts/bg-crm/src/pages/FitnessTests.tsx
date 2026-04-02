@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Papa from "papaparse";
-import { fetchSessions, createSession, fetchPlayers, bulkInsertResults, fetchResultsBySessionWithPlayers, updateResult, deleteResult, insertResult } from "@/lib/queries";
+import { fetchSessions, createSession, fetchPlayers, bulkInsertResults, fetchResultsBySessionWithPlayers, updateResult, deleteResult, insertResult, createPlayer } from "@/lib/queries";
 import { TableSkeleton } from "@/components/Skeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { formatBroncho } from "@/lib/utils";
@@ -122,12 +122,14 @@ function InlineEditForm({
   onChange,
   onSave,
   onCancel,
+  saveLabel,
 }: {
   form: EditForm;
   saving: boolean;
   onChange: (f: EditForm) => void;
   onSave: () => void;
   onCancel: () => void;
+  saveLabel?: string;
 }) {
   const inp = (label: string, key: keyof EditForm, placeholder?: string) => (
     <div>
@@ -171,7 +173,7 @@ function InlineEditForm({
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 px-3 py-1.5 text-xs rounded border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
         <button onClick={onSave} disabled={saving} className="flex-1 px-3 py-1.5 text-xs rounded btn-primary text-white font-semibold disabled:opacity-60">
-          {saving ? "Saving…" : "Save"}
+          {saving ? "Saving…" : (saveLabel ?? "Save")}
         </button>
       </div>
     </div>
@@ -193,6 +195,23 @@ function SessionDetail({
   const [editingId, setEditingId] = useState<string | null>(null); // result id or "add:{playerId}"
   const [editForm, setEditForm] = useState<EditForm>(BLANK_FORM);
   const [saving, setSaving] = useState(false);
+
+  // ── Add-entry panel state ────────────────────────────────────────────────
+  type AddStep = "search" | "result" | "new-player";
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [addStep, setAddStep] = useState<AddStep>("search");
+  const [addSearch, setAddSearch] = useState("");
+  const [addSelectedPlayer, setAddSelectedPlayer] = useState<Player | null>(null);
+  const [addResultForm, setAddResultForm] = useState<EditForm>(BLANK_FORM);
+  const [addSaving, setAddSaving] = useState(false);
+  const [newPlayerForm, setNewPlayerForm] = useState<{
+    name: string;
+    code: string;
+    team: "Sharks" | "Wildcats";
+    primary_position: string;
+    age_range: "" | "U18" | "18-24" | "25+";
+  }>({ name: "", code: "", team: "Sharks", primary_position: "", age_range: "" });
+  const [newPlayerSaving, setNewPlayerSaving] = useState(false);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -298,6 +317,95 @@ function SessionDetail({
     }
   };
 
+  // ── Add-entry panel helpers ──────────────────────────────────────────────
+  const addCandidates = useMemo(() => {
+    const q = addSearch.trim().toLowerCase();
+    return allPlayers
+      .filter((p) => !participantIds.has(p.id))
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allPlayers, participantIds, addSearch]);
+
+  const openAddPanel = () => {
+    setEditingId(null);
+    setAddPanelOpen(true);
+    setAddStep("search");
+    setAddSearch("");
+    setAddSelectedPlayer(null);
+    setAddResultForm(BLANK_FORM);
+    setNewPlayerForm({ name: "", code: "", team: "Sharks", primary_position: "", age_range: "" });
+  };
+
+  const closeAddPanel = () => {
+    setAddPanelOpen(false);
+    setAddStep("search");
+    setAddSearch("");
+    setAddSelectedPlayer(null);
+  };
+
+  const selectAddPlayer = (p: Player) => {
+    setAddSelectedPlayer(p);
+    setAddResultForm(BLANK_FORM);
+    setAddStep("result");
+  };
+
+  const handleSaveAddResult = async () => {
+    if (!addSelectedPlayer) return;
+    setAddSaving(true);
+    try {
+      const updates = formToUpdates(addResultForm);
+      await insertResult({
+        session_id: session.id,
+        player_id: addSelectedPlayer.id,
+        bronco_mins: updates.bronco_mins ?? null,
+        mas_ms: updates.mas_ms ?? null,
+        seconds: null,
+        ten_m_1: updates.ten_m_1 ?? null,
+        ten_m_2: updates.ten_m_2 ?? null,
+        twenty_m_1: updates.twenty_m_1 ?? null,
+        twenty_m_2: updates.twenty_m_2 ?? null,
+        forty_m_1: updates.forty_m_1 ?? null,
+        forty_m_2: updates.forty_m_2 ?? null,
+        eighty_m_runs: null,
+        sixty_m_runs: null,
+        forty_m_runs: null,
+        notes: updates.notes ?? null,
+      });
+      await reload();
+      closeAddPanel();
+      toast({ title: `Result added for ${addSelectedPlayer.name}` });
+    } catch (err: unknown) {
+      toast({ title: "Failed to add result", description: String(err), variant: "destructive" });
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
+  const handleSaveNewPlayer = async () => {
+    if (!newPlayerForm.name.trim() || !newPlayerForm.code.trim()) return;
+    setNewPlayerSaving(true);
+    try {
+      const created = await createPlayer({
+        name: newPlayerForm.name.trim(),
+        code: newPlayerForm.code.trim().toUpperCase(),
+        team: newPlayerForm.team,
+        primary_position: newPlayerForm.primary_position || "Forward",
+        secondary_position: null,
+        age: null,
+        year_of_birth: null,
+        age_range: (newPlayerForm.age_range || null) as Player["age_range"],
+        is_active: true,
+      });
+      setAllPlayers((prev) => [...prev, created]);
+      selectAddPlayer(created);
+      toast({ title: `Player "${created.name}" created` });
+    } catch (err: unknown) {
+      toast({ title: "Failed to create player", description: String(err), variant: "destructive" });
+    } finally {
+      setNewPlayerSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-5">
@@ -324,19 +432,218 @@ function SessionDetail({
           </div>
           <p className="text-sm text-muted-foreground mt-1">{session.test_date}{session.notes ? ` · ${session.notes}` : ""}</p>
         </div>
-        <button
-          onClick={() => { setEditMode((v) => !v); setEditingId(null); }}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
-            editMode
-              ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/30"
-              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
+        <div className="flex items-center gap-2 flex-wrap">
+          {editMode && (
+            <button
+              onClick={addPanelOpen ? closeAddPanel : openAddPanel}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
+                addPanelOpen
+                  ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                  : "bg-indigo-500/10 text-indigo-400 border-indigo-500/25 hover:bg-indigo-500/20"
+              )}
+            >
+              + Add entry
+            </button>
           )}
-        >
-          <Pencil size={13} />
-          {editMode ? "Done editing" : "Edit results"}
-        </button>
+          <button
+            onClick={() => { setEditMode((v) => !v); setEditingId(null); closeAddPanel(); }}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
+              editMode
+                ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/30"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/40"
+            )}
+          >
+            <Pencil size={13} />
+            {editMode ? "Done editing" : "Edit results"}
+          </button>
+        </div>
       </div>
+
+      {/* ── Add-entry panel ─────────────────────────────────────────────── */}
+      {addPanelOpen && (
+        <div className="bg-card border border-indigo-500/25 rounded-xl overflow-hidden">
+          {/* Panel header */}
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-indigo-500/5">
+            <span className="text-sm font-semibold text-indigo-400">
+              {addStep === "search" && "Add entry — select player"}
+              {addStep === "result" && `Add result for ${addSelectedPlayer?.name}`}
+              {addStep === "new-player" && "Create new player"}
+            </span>
+            <button onClick={closeAddPanel} className="text-xs text-muted-foreground hover:text-foreground">✕ Cancel</button>
+          </div>
+
+          {/* Step: search */}
+          {addStep === "search" && (
+            <div>
+              <div className="px-4 pt-3 pb-2">
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search by name or code…"
+                  value={addSearch}
+                  onChange={(e) => setAddSearch(e.target.value)}
+                  className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-indigo-500/50 transition-colors"
+                />
+              </div>
+              <div className="max-h-52 overflow-y-auto divide-y divide-border/50">
+                {addCandidates.map((p) => {
+                  const pos = getPos(p.primary_position);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => selectAddPlayer(p)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors text-left"
+                    >
+                      <span className={cn("text-[10px] font-bold font-time w-7 text-center", pos.text)}>
+                        {p.primary_position?.slice(0, 3) || "?"}
+                      </span>
+                      <span className="text-sm text-foreground flex-1">{p.name}</span>
+                      <span className="text-[11px] text-muted-foreground font-time">{p.code}</span>
+                      <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", p.team === "Sharks" ? "text-blue-400 bg-blue-500/10" : "text-amber-400 bg-amber-500/10")}>
+                        {p.team}
+                      </span>
+                    </button>
+                  );
+                })}
+                {addCandidates.length === 0 && (
+                  <div className="px-4 py-4 text-sm text-muted-foreground">
+                    {addSearch ? `No players matching "${addSearch}"` : "All players are already in this session."}
+                  </div>
+                )}
+              </div>
+              {/* Create new player option */}
+              <div className="border-t border-border/50 px-4 py-3">
+                <button
+                  onClick={() => {
+                    setAddStep("new-player");
+                    setNewPlayerForm((f) => ({
+                      ...f,
+                      name: addSearch.trim(),
+                      code: "",
+                      team: "Sharks",
+                      primary_position: "Forward",
+                      age_range: "",
+                    }));
+                  }}
+                  className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+                >
+                  + Create new player{addSearch.trim() ? ` "${addSearch.trim()}"` : ""}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step: result entry */}
+          {addStep === "result" && addSelectedPlayer && (
+            <div className="px-4 py-3 space-y-3">
+              <div className="flex items-center gap-2.5">
+                <span className={cn("text-[10px] font-bold font-time", getPos(addSelectedPlayer.primary_position).text)}>
+                  {addSelectedPlayer.primary_position?.slice(0, 3) || "?"}
+                </span>
+                <span className="text-sm font-semibold text-foreground">{addSelectedPlayer.name}</span>
+                <span className="text-[11px] text-muted-foreground font-time">{addSelectedPlayer.code}</span>
+                <button
+                  onClick={() => setAddStep("search")}
+                  className="ml-auto text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  ← Change
+                </button>
+              </div>
+              <InlineEditForm
+                form={addResultForm}
+                saving={addSaving}
+                onChange={setAddResultForm}
+                onSave={handleSaveAddResult}
+                onCancel={closeAddPanel}
+                saveLabel="Save result"
+              />
+            </div>
+          )}
+
+          {/* Step: new player form */}
+          {addStep === "new-player" && (
+            <div className="px-4 py-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Name *</label>
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Full name"
+                    value={newPlayerForm.name}
+                    onChange={(e) => setNewPlayerForm((f) => ({ ...f, name: e.target.value }))}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-indigo-500/50 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Code *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. JD01"
+                    value={newPlayerForm.code}
+                    onChange={(e) => setNewPlayerForm((f) => ({ ...f, code: e.target.value }))}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm font-time text-foreground placeholder:text-muted-foreground outline-none focus:border-indigo-500/50 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Team</label>
+                  <select
+                    value={newPlayerForm.team}
+                    onChange={(e) => setNewPlayerForm((f) => ({ ...f, team: e.target.value as "Sharks" | "Wildcats" }))}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-indigo-500/50 transition-colors"
+                  >
+                    <option value="Sharks">Sharks</option>
+                    <option value="Wildcats">Wildcats</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Position</label>
+                  <select
+                    value={newPlayerForm.primary_position}
+                    onChange={(e) => setNewPlayerForm((f) => ({ ...f, primary_position: e.target.value }))}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-indigo-500/50 transition-colors"
+                  >
+                    <option value="Forward">Forward</option>
+                    <option value="Midfielder">Midfielder</option>
+                    <option value="Defender">Defender</option>
+                    <option value="Goalkeeper">Goalkeeper</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Age group</label>
+                  <select
+                    value={newPlayerForm.age_range}
+                    onChange={(e) => setNewPlayerForm((f) => ({ ...f, age_range: e.target.value as typeof f.age_range }))}
+                    className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-indigo-500/50 transition-colors"
+                  >
+                    <option value="">— select —</option>
+                    <option value="U18">U18</option>
+                    <option value="18-24">18–24</option>
+                    <option value="25+">25+</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleSaveNewPlayer}
+                  disabled={!newPlayerForm.name.trim() || !newPlayerForm.code.trim() || newPlayerSaving}
+                  className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-40 transition-colors"
+                >
+                  {newPlayerSaving ? "Creating…" : "Create player & continue"}
+                </button>
+                <button
+                  onClick={() => setAddStep("search")}
+                  className="px-3 py-2 rounded-lg text-sm border border-border text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Metric strip */}
       <div className="grid grid-cols-2 sm:grid-cols-5 border border-border rounded-2xl overflow-hidden divide-x divide-y sm:divide-y-0 divide-border bg-card">
