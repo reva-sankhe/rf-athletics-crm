@@ -12,10 +12,10 @@ import { useToast } from "@/hooks/use-toast";
 
 const PRIMARY_POSITIONS = ["Goalkeeper", "Defender", "Midfielder", "Forward"];
 const SECONDARY_POSITIONS: Record<string, string[]> = {
-  Goalkeeper: ["Sweeper Keeper"],
-  Defender:   ["Center Back", "Left Back", "Right Back", "Wing Back"],
-  Midfielder: ["Defensive Midfielder", "Central Midfielder", "Central Attacking Midfielder", "Left Midfielder", "Right Midfielder"],
-  Forward:    ["Striker", "Center Forward", "Left Winger", "Right Winger", "Second Striker"],
+  Goalkeeper: [],
+  Defender:   ["Wing Back", "Center Back"],
+  Midfielder: ["Right Wing", "Left Wing", "CDM", "CM"],
+  Forward:    ["Striker", "CAM"],
 };
 const AGE_RANGES = ["U18", "18-24", "25+"];
 

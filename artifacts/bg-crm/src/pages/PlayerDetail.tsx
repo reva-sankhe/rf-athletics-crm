@@ -12,10 +12,10 @@ import { useToast } from "@/hooks/use-toast";
 
 const PRIMARY_POSITIONS = ["Goalkeeper", "Defender", "Midfielder", "Forward"];
 const SECONDARY_POSITIONS: Record<string, string[]> = {
-  Goalkeeper: ["Sweeper Keeper"],
-  Defender:   ["Center Back", "Left Back", "Right Back", "Wing Back"],
-  Midfielder: ["Defensive Midfielder", "Central Midfielder", "Central Attacking Midfielder", "Left Midfielder", "Right Midfielder"],
-  Forward:    ["Striker", "Center Forward", "Left Winger", "Right Winger", "Second Striker"],
+  Goalkeeper: [],
+  Defender:   ["Wing Back", "Center Back"],
+  Midfielder: ["Right Wing", "Left Wing", "CDM", "CM"],
+  Forward:    ["Striker", "CAM"],
 };
 
 export default function PlayerDetail() {
@@ -130,10 +130,10 @@ export default function PlayerDetail() {
           </div>
           <div className="flex gap-2">
             {editing ? (
-              <>
+              <div className="hidden sm:flex gap-2">
                 <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 text-sm border border-border rounded-md text-muted-foreground hover:text-foreground" data-testid="button-cancel-edit"><X size={13} />Cancel</button>
                 <button onClick={saveEdit} disabled={saving} className="flex items-center gap-1 px-3 py-1.5 text-sm btn-primary text-white rounded-xl font-semibold disabled:opacity-60" data-testid="button-save-edit"><Save size={13} />{saving ? "Saving…" : "Save"}</button>
-              </>
+              </div>
             ) : (
               <button onClick={startEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-md text-muted-foreground hover:text-foreground transition-colors" data-testid="button-edit-player"><Edit size={13} />Edit</button>
             )}
@@ -169,6 +169,10 @@ export default function PlayerDetail() {
             <div className="flex items-center gap-2 pt-4">
               <input type="checkbox" id="edit_active" checked={editForm.is_active ?? true} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })} className="rounded border-border" />
               <label htmlFor="edit_active" className="text-sm text-muted-foreground">Active</label>
+            </div>
+            <div className="sm:hidden flex gap-2 pt-2 col-span-2">
+              <button onClick={cancelEdit} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm border border-border rounded-md text-muted-foreground hover:text-foreground"><X size={13} />Cancel</button>
+              <button onClick={saveEdit} disabled={saving} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm btn-primary text-white rounded-xl font-semibold disabled:opacity-60"><Save size={13} />{saving ? "Saving…" : "Save"}</button>
             </div>
           </div>
         )}

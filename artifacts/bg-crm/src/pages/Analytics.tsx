@@ -827,7 +827,7 @@ export default function Analytics() {
 
         // For chart: all sessions chronologically, with bronco per selected player
         const sessionLabels = chronoSessions.map((s) => s.test_name);
-        const compareChartData = chronoSessions.map((s) => {
+        const compareChartData = [...chronoSessions].reverse().map((s) => {
           const row: Record<string, string | number | null> = { session: s.test_name };
           selected.forEach((pc) => {
             const r = teamResults.find((x) => x.session_id === s.id && x.player_id === pc.player.id && x.bronco_mins !== null);
@@ -1146,10 +1146,10 @@ export default function Analytics() {
                         </div>
                       ))}
                     </div>
-                    <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={compareChartData} margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={compareChartData} margin={{ top: 4, right: 16, bottom: 40, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
-                        <XAxis dataKey="session" tick={{ fill: chartAxis, fontSize: 10 }} />
+                        <XAxis dataKey="session" tick={{ fill: chartAxis, fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
                         <YAxis tickFormatter={(v) => formatBroncho(v)} domain={["auto", "auto"]} tick={{ fill: chartAxis, fontSize: 10 }} />
                         <Tooltip
                           contentStyle={{ background: chartTooltipBg, border: `1px solid ${chartTooltipBorder}`, borderRadius: 8 }}
