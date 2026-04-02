@@ -119,6 +119,9 @@ async function buildAll() {
     esbuild({
       ...sharedConfig,
       entryPoints: [path.resolve(artifactDir, "src/handler.ts")],
+      outdir: undefined,
+      outExtension: undefined,
+      outfile: path.resolve(artifactDir, "api/index.mjs"),
     }),
   ]);
 }
