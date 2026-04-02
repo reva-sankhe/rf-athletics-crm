@@ -1,11 +1,14 @@
 {
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "node ./build.mjs",
-  "functions": {
-    "api/index.js": {
-      "maxDuration": 10,
-      "includeFiles": "dist/handler.mjs"
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node",
+      "config": { "includeFiles": "dist/handler.mjs" }
     }
-  },
-  "rewrites": [{ "source": "/:path*", "destination": "/api/index" }]
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index" }
+  ]
 }
