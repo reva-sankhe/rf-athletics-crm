@@ -1,5 +1,4 @@
 {
   "installCommand": "corepack enable && cd ../.. && pnpm install",
-  "buildCommand": "node ./build.mjs",
   "rewrites": [{ "source": "/:path*", "destination": "/api/index" }]
 }
