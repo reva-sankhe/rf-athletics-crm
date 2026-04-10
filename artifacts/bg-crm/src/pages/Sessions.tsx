@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Plus, CalendarDays, Clock, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { fetchTrainingSessions, createTrainingSession, fetchLoggedPlayerIds } from "@/lib/queries";
+import { fetchTrainingSessions, createTrainingSession } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import type { TrainingSession, SessionType } from "@/lib/types";
 
@@ -223,17 +223,22 @@ export default function Sessions() {
       const sess = await fetchTrainingSessions();
       setSessions(sess);
 
-      // Fetch logged counts + avg actual loads for all sessions
       if (sess.length > 0) {
         const counts: Record<string, number> = {};
         const avgs: Record<string, number | null> = {};
         await Promise.all(
           sess.map(async (s) => {
-            const ids = await fetchLoggedPlayerIds(s.id);
-            counts[s.id] = ids.length;
-            // For avg load we'd need full RPE data — skip for list view performance,
-            // just show count. avg load shown on detail page.
-            avgs[s.id] = null;
+            const { data } = await supabase
+              .from("session_rpe")
+              .select("player_id, load_au")
+              .eq("session_id", s.id);
+            counts[s.id] = data ? data.length : 0;
+            if (data && data.length > 0) {
+              const total = data.reduce((sum: number, r: { load_au: number }) => sum + (r.load_au ?? 0), 0);
+              avgs[s.id] = Math.round(total / data.length);
+            } else {
+              avgs[s.id] = null;
+            }
           })
         );
         setLoggedCounts(counts);
@@ -245,29 +250,6 @@ export default function Sessions() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  // Fetch avg actual loads for the session list
-  useEffect(() => {
-    if (sessions.length === 0) return;
-    (async () => {
-      const avgs: Record<string, number | null> = {};
-      await Promise.all(
-        sessions.map(async (s) => {
-          const { data } = await supabase
-            .from("session_rpe")
-            .select("load_au")
-            .eq("session_id", s.id);
-          if (data && data.length > 0) {
-            const total = data.reduce((sum: number, r: { load_au: number }) => sum + (r.load_au ?? 0), 0);
-            avgs[s.id] = Math.round(total / data.length);
-          } else {
-            avgs[s.id] = null;
-          }
-        })
-      );
-      setAvgLoads(avgs);
-    })();
-  }, [sessions]);
 
   return (
     <div className="space-y-5">
