@@ -1,4 +1,0 @@
-{
-  "installCommand": "corepack enable && cd ../.. && pnpm install",
-  "rewrites": [{ "source": "/:path*", "destination": "/api/index" }]
-}
