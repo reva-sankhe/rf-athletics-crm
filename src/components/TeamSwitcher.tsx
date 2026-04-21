@@ -1,33 +1,28 @@
-import { useTeam } from "@/context/TeamContext";
+import { useTeam, type Team } from "@/context/TeamContext";
 import { cn } from "@/lib/utils";
-import type { Team } from "@/lib/types";
 
 const TEAMS: { id: Team; label: string }[] = [
-  { id: "Sharks", label: "Sharks" },
-  { id: "Wildcats", label: "Wildcats" },
+  { id: "Team A", label: "Team A" },
+  { id: "Team B", label: "Team B" },
 ];
 
 export function TeamSwitcher() {
   const { team, setTeam } = useTeam();
 
   return (
-    <div
-      className="inline-flex p-0.5 rounded-lg bg-muted border border-border"
-      data-testid="team-switcher"
-    >
-      {TEAMS.map(({ id, label }) => (
+    <div className="flex items-center gap-1 p-1 rounded-lg bg-muted">
+      {TEAMS.map((t) => (
         <button
-          key={id}
-          data-testid={`team-switch-${id.toLowerCase()}`}
-          onClick={() => setTeam(id)}
+          key={t.id}
+          onClick={() => setTeam(t.id)}
           className={cn(
-            "px-3.5 py-1.5 rounded-md text-sm font-medium transition-all duration-150",
-            team === id
+            "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            team === t.id
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          {label}
+          {t.label}
         </button>
       ))}
     </div>

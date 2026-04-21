@@ -1,19 +1,14 @@
 import { Link, useLocation } from "wouter";
-import { ChevronDown, Sun, Moon, CalendarDays, LayoutDashboard, Users, Dumbbell, BarChart2, ClipboardList } from "lucide-react";
+import { ChevronDown, Sun, Moon, LayoutDashboard, Users, BarChart2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/ThemeContext";
 
 const navItems = [
-  { href: "/",         label: "Dashboard",    icon: LayoutDashboard },
-  { href: "/players",  label: "Players",      icon: Users           },
-  { href: "/sessions", label: "Sessions",     icon: ClipboardList   },
-  { href: "/calendar", label: "Calendar",     icon: CalendarDays    },
-  { href: "/fitness",  label: "Fitness Tests",icon: Dumbbell        },
-  { href: "/analytics",label: "Analytics",    icon: BarChart2       },
+  { href: "/",          label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/athletes",  label: "Athletes",     icon: Users           },
+  { href: "/analytics", label: "Analytics",    icon: BarChart2       },
 ];
-
-const logoSrc = `${import.meta.env.BASE_URL}bg-logo.png`.replace(/\/\//g, "/");
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -92,20 +87,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="px-4 pt-5 pb-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <img
-              src={logoSrc}
-              alt="Bombay Gymkhana"
-              className={cn(
-                "w-10 h-10 object-contain shrink-0",
-                !isDark && "brightness-75"
-              )}
-            />
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
             <div className="min-w-0">
               <div className={cn("text-[10px] font-semibold uppercase tracking-[0.14em]", isDark ? "text-slate-500" : "text-slate-400")}>
-                Bombay Gymkhana
+                Team Management
               </div>
               <div className="text-base font-medium leading-tight truncate text-foreground">
-                Women's <span className="text-indigo-500 dark:text-indigo-400">Football</span>
+                Athlete <span className="text-indigo-500 dark:text-indigo-400">CRM</span>
               </div>
             </div>
           </div>
@@ -126,7 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className={cn("h-px mb-3", isDark ? "bg-white/6" : "bg-slate-200")} />
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className={cn("text-[11px]", isDark ? "text-slate-600" : "text-slate-400")}>BG CRM · v1.0</span>
+          <span className={cn("text-[11px]", isDark ? "text-slate-600" : "text-slate-400")}>Athlete CRM · v1.0</span>
         </div>
       </div>
     </div>

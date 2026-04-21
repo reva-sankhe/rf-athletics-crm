@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from "react";
-import type { Team } from "@/lib/types";
+
+export type Team = string;
 
 interface TeamContextValue {
   team: Team;
@@ -7,12 +8,13 @@ interface TeamContextValue {
 }
 
 const TeamContext = createContext<TeamContextValue>({
-  team: "Sharks",
+  team: "Team A",
   setTeam: () => {},
 });
 
 export function TeamProvider({ children }: { children: React.ReactNode }) {
-  const [team, setTeam] = useState<Team>("Sharks");
+  const [team, setTeam] = useState<Team>("Team A");
+
   return (
     <TeamContext.Provider value={{ team, setTeam }}>
       {children}
