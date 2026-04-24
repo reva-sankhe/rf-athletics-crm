@@ -44,4 +44,19 @@ export interface WAAthletePersonalBest {
   date: string | null;
 }
 
+export interface AthleteEvent {
+  id: string;
+  aa_athlete_id: string;
+  event_name: string;
+  is_main_event: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonalBestWithEvent extends WAAthletePersonalBest {
+  event_name: string;
+  is_main_event: boolean;
+  formatted_mark: string;
+}
+
 export type Team = string;

@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
-import type { Athlete, WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest } from "./types";
+import type { Athlete, WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent } from "./types";
+import { isEventMatch, formatPerformance } from "./eventUtils";
 
 // Athletes
 export async function fetchAthletes(team?: string): Promise<Athlete[]> {
@@ -72,6 +73,55 @@ export async function fetchWAAthletePersonalBests(athleteId: string): Promise<WA
     .order("discipline");
   if (error) throw error;
   return data as WAAthletePersonalBest[];
+}
+
+// Athlete Events
+export async function fetchAthleteEvents(athleteId: string): Promise<AthleteEvent[]> {
+  const { data, error } = await supabase
+    .from("athlete_events")
+    .select("*")
+    .eq("aa_athlete_id", athleteId)
+    .order("is_main_event", { ascending: false })
+    .order("event_name");
+  if (error) throw error;
+  return data as AthleteEvent[];
+}
+
+// Fetch personal bests matched to athlete's specific events
+export async function fetchPersonalBestsForAthleteEvents(
+  athleteId: string
+): Promise<PersonalBestWithEvent[]> {
+  try {
+    // Get athlete's events
+    const events = await fetchAthleteEvents(athleteId);
+    
+    // Get all personal bests
+    const pbs = await fetchWAAthletePersonalBests(athleteId);
+    
+    // Match PBs to events using smart matching
+    const matched: PersonalBestWithEvent[] = [];
+    
+    for (const event of events) {
+      // Find the best matching PB for this event
+      const matchingPB = pbs.find(pb => 
+        pb.discipline && isEventMatch(pb.discipline, event.event_name)
+      );
+      
+      if (matchingPB) {
+        matched.push({
+          ...matchingPB,
+          event_name: event.event_name,
+          is_main_event: event.is_main_event,
+          formatted_mark: formatPerformance(matchingPB.mark, event.event_name)
+        });
+      }
+    }
+    
+    return matched;
+  } catch (error) {
+    console.error("Error fetching personal bests for athlete events:", error);
+    return [];
+  }
 }
 
 // Helper function to get unique events from all athletes

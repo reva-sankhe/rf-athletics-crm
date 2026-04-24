@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests } from "@/lib/queries";
+import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents } from "@/lib/queries";
 import { Skeleton } from "@/components/Skeleton";
-import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest } from "@/lib/types";
+import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent } from "@/lib/types";
 import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart } from "lucide-react";
 import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
@@ -12,6 +12,8 @@ export default function AthleteDetail() {
   const [athlete, setAthlete] = useState<WAAthleteProfile | null>(null);
   const [honours, setHonours] = useState<WAAthleteHonour[]>([]);
   const [personalBests, setPersonalBests] = useState<WAAthletePersonalBest[]>([]);
+  const [athleteEvents, setAthleteEvents] = useState<AthleteEvent[]>([]);
+  const [matchedPersonalBests, setMatchedPersonalBests] = useState<PersonalBestWithEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -19,6 +21,24 @@ export default function AthleteDetail() {
     try {
       const profile = await fetchWAAthleteProfile(id!);
       setAthlete(profile);
+      
+      // Try to fetch athlete events from new normalized table
+      try {
+        const events = await fetchAthleteEvents(id!);
+        setAthleteEvents(events);
+      } catch (eventsError) {
+        console.warn("Could not fetch athlete events:", eventsError);
+        setAthleteEvents([]);
+      }
+      
+      // Try to fetch matched personal bests for athlete's events
+      try {
+        const pbsWithEvents = await fetchPersonalBestsForAthleteEvents(id!);
+        setMatchedPersonalBests(pbsWithEvents);
+      } catch (matchedPBError) {
+        console.warn("Could not fetch matched personal bests:", matchedPBError);
+        setMatchedPersonalBests([]);
+      }
       
       // Try to fetch personal bests, but don't fail if it doesn't work
       try {
@@ -70,30 +90,50 @@ export default function AthleteDetail() {
       .trim();
   };
 
-  // Filter personal bests to only show disciplines that match the athlete's events
-  const filteredPersonalBests = personalBests.filter(pb => {
-    if (!pb.discipline) return false;
-    const normalizedDiscipline = normalize(pb.discipline);
+  // Enhanced matching for related events
+  const isRelatedEvent = (discipline: string, athleteEvents: string[]) => {
+    if (!discipline) return false;
+    const normalizedDiscipline = normalize(discipline);
     
-    // Check if the discipline matches any of the athlete's events
-    return events.some(event => {
+    // Check for exact or partial matches
+    const hasMatch = athleteEvents.some(event => {
       const normalizedEvent = normalize(event);
       return normalizedDiscipline.includes(normalizedEvent) || 
              normalizedEvent.includes(normalizedDiscipline);
     });
-  });
+    
+    if (hasMatch) return true;
+    
+    // Special case: treat hurdles events as related regardless of distance
+    // (e.g., 110m Hurdles and 60m Hurdles are related)
+    if (normalizedDiscipline.includes('hurdles')) {
+      return athleteEvents.some(e => normalize(e).includes('hurdles'));
+    }
+    
+    // Special case: treat sprint distances as related (100m, 200m, 400m)
+    const sprintPattern = /^(100|200|400)m$/;
+    if (sprintPattern.test(normalizedDiscipline)) {
+      return athleteEvents.some(e => sprintPattern.test(normalize(e)));
+    }
+    
+    // Special case: treat middle distance events as related (800m, 1500m)
+    const middleDistancePattern = /^(800|1500)m$/;
+    if (middleDistancePattern.test(normalizedDiscipline)) {
+      return athleteEvents.some(e => middleDistancePattern.test(normalize(e)));
+    }
+    
+    return false;
+  };
+
+  // Filter personal bests to only show disciplines that match the athlete's events
+  const filteredPersonalBests = personalBests.filter(pb => 
+    pb.discipline && isRelatedEvent(pb.discipline, events)
+  );
 
   // Filter honours to only show disciplines that match the athlete's events
-  const filteredHonours = honours.filter(honour => {
-    if (!honour.discipline) return false;
-    const normalizedDiscipline = normalize(honour.discipline);
-    
-    return events.some(event => {
-      const normalizedEvent = normalize(event);
-      return normalizedDiscipline.includes(normalizedEvent) || 
-             normalizedEvent.includes(normalizedDiscipline);
-    });
-  });
+  const filteredHonours = honours.filter(honour => 
+    honour.discipline && isRelatedEvent(honour.discipline, events)
+  );
 
   // Prepare chart data from filtered honours
   const chartData = filteredHonours
@@ -193,6 +233,40 @@ export default function AthleteDetail() {
               World Ranking
             </div>
             <div className="text-lg font-semibold text-foreground">—</div>
+          </div>
+          
+          <div className="sm:col-span-2 lg:col-span-4">
+            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
+              <Target size={12} />
+              Personal Best
+            </div>
+            <div className="text-lg font-semibold text-foreground">
+              {matchedPersonalBests.length > 0 ? (
+                <div className="flex flex-wrap gap-3">
+                  {matchedPersonalBests.map((pb, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-2">
+                      <span className={`text-sm font-normal ${
+                        pb.is_main_event ? 'text-indigo-400' : 'text-muted-foreground'
+                      }`}>
+                        {pb.event_name}:
+                      </span>
+                      <span className={`font-mono font-bold ${
+                        pb.is_main_event ? 'text-emerald-300' : 'text-emerald-400'
+                      }`}>
+                        {pb.formatted_mark}
+                      </span>
+                      {pb.is_main_event && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold">
+                          MAIN
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                "—"
+              )}
+            </div>
           </div>
         </div>
       </div>
