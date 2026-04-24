@@ -47,7 +47,8 @@ export function BenchmarkAnalysisTab() {
   const athleteBestMarks = rfAthletes.map(athlete => {
     const athleteResults = rfResults.filter(
       r => r.aa_athlete_id === athlete.aa_athlete_id && 
-           r.discipline.includes(selectedEvent) &&
+           // Match "100m" to "100 Metres", "200m" to "200 Metres", etc.
+           r.discipline.toLowerCase().includes(selectedEvent.toLowerCase().replace('m', ' m')) &&
            !r.not_legal
     );
     
