@@ -75,53 +75,54 @@
   --elevate-1: rgba(0,0,0,0.03);
   --elevate-2: rgba(0,0,0,0.06);
 
-  --background: 220 20% 97%;
-  --foreground: 222 47% 10%;
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
 
-  --card: 0 0% 100% / 0.75;
-  --card-foreground: 222 47% 10%;
-  --card-border: 220 16% 88%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --card-border: 0 0% 90%;
 
-  --sidebar: 220 20% 97% / 0.96;
-  --sidebar-foreground: 222 20% 30%;
-  --sidebar-border: 220 16% 90%;
-  --sidebar-primary: 239 84% 59%;
+  --sidebar: 0 0% 98%;
+  --sidebar-foreground: 0 0% 20%;
+  --sidebar-border: 0 0% 90%;
+  --sidebar-primary: 142 100% 33%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 20% 92% / 0.8;
-  --sidebar-accent-foreground: 222 47% 10%;
-  --sidebar-ring: 239 84% 59%;
+  --sidebar-accent: 0 0% 95%;
+  --sidebar-accent-foreground: 0 0% 0%;
+  --sidebar-ring: 142 100% 33%;
 
-  --foreground: 222 47% 10%;
-  --border: 220 16% 88%;
-  --input: 220 16% 93%;
-  --ring: 239 84% 59%;
+  --foreground: 0 0% 0%;
+  --border: 0 0% 90%;
+  --input: 0 0% 96%;
+  --ring: 142 100% 33%;
 
-  /* Primary: indigo */
-  --primary: 239 84% 59%;
+  /* Primary: RF Green */
+  --primary: 142 100% 33%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 16% 93%;
-  --secondary-foreground: 222 20% 28%;
+  /* Secondary: RF Gold */
+  --secondary: 43 56% 62%;
+  --secondary-foreground: 0 0% 0%;
 
-  --muted: 220 16% 93%;
-  --muted-foreground: 220 12% 44%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 40%;
 
-  --accent: 220 20% 91%;
-  --accent-foreground: 222 47% 10%;
+  --accent: 43 56% 62%;
+  --accent-foreground: 0 0% 0%;
 
-  --destructive: 3 80% 53%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  --popover: 0 0% 100% / 0.98;
-  --popover-foreground: 222 47% 10%;
-  --popover-border: 220 16% 85%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 0%;
+  --popover-border: 0 0% 90%;
 
-  /* Charts — indigo + yellow team palette */
-  --chart-1: 239 84% 59%;
-  --chart-2: 45 93% 47%;
-  --chart-3: 142 65% 42%;
-  --chart-4: 187 75% 40%;
-  --chart-5: 3 80% 53%;
+  /* Charts — neutral with green/gold accents */
+  --chart-1: 142 100% 33%;
+  --chart-2: 43 56% 62%;
+  --chart-3: 0 0% 45%;
+  --chart-4: 0 0% 60%;
+  --chart-5: 0 0% 75%;
 
   --app-font-sans: 'DM Sans', system-ui, sans-serif;
   --app-font-serif: 'Instrument Serif', Georgia, serif;
@@ -156,52 +157,53 @@
   --elevate-1: rgba(255,255,255,0.04);
   --elevate-2: rgba(255,255,255,0.08);
 
-  --background: 224 40% 5%;
-  --foreground: 220 20% 95%;
+  --background: 0 0% 10%;
+  --foreground: 0 0% 95%;
 
-  --card: 224 35% 10% / 0.55;
-  --card-foreground: 220 20% 95%;
-  --card-border: 220 50% 100% / 0.07;
+  --card: 0 0% 12%;
+  --card-foreground: 0 0% 95%;
+  --card-border: 0 0% 20%;
 
-  --sidebar: 224 40% 6% / 0.94;
-  --sidebar-foreground: 220 12% 68%;
-  --sidebar-border: 220 50% 100% / 0.07;
-  --sidebar-primary: 239 84% 66%;
+  --sidebar: 0 0% 8%;
+  --sidebar-foreground: 0 0% 70%;
+  --sidebar-border: 0 0% 20%;
+  --sidebar-primary: 142 100% 40%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 224 35% 12% / 0.7;
-  --sidebar-accent-foreground: 220 18% 93%;
-  --sidebar-ring: 239 84% 66%;
+  --sidebar-accent: 0 0% 15%;
+  --sidebar-accent-foreground: 0 0% 95%;
+  --sidebar-ring: 142 100% 40%;
 
-  --border: 220 50% 100% / 0.08;
-  --input: 224 30% 14% / 0.8;
-  --ring: 239 84% 66%;
+  --border: 0 0% 20%;
+  --input: 0 0% 15%;
+  --ring: 142 100% 40%;
 
-  /* Primary: indigo */
-  --primary: 239 84% 66%;
+  /* Primary: RF Green */
+  --primary: 142 100% 40%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 224 30% 14% / 0.6;
-  --secondary-foreground: 220 12% 78%;
+  /* Secondary: RF Gold */
+  --secondary: 43 56% 65%;
+  --secondary-foreground: 0 0% 0%;
 
-  --muted: 224 30% 12% / 0.5;
-  --muted-foreground: 220 12% 46%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 50%;
 
-  --accent: 224 35% 15% / 0.65;
-  --accent-foreground: 220 18% 93%;
+  --accent: 43 56% 65%;
+  --accent-foreground: 0 0% 0%;
 
-  --destructive: 3 80% 58%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  --popover: 224 40% 7% / 0.96;
-  --popover-foreground: 220 18% 93%;
-  --popover-border: 220 50% 100% / 0.09;
+  --popover: 0 0% 12%;
+  --popover-foreground: 0 0% 95%;
+  --popover-border: 0 0% 20%;
 
-  /* Charts — indigo + yellow team palette */
-  --chart-1: 239 84% 66%;
-  --chart-2: 45 93% 55%;
-  --chart-3: 142 65% 48%;
-  --chart-4: 187 75% 52%;
-  --chart-5: 3 80% 58%;
+  /* Charts — neutral with green/gold accents */
+  --chart-1: 142 100% 40%;
+  --chart-2: 43 56% 65%;
+  --chart-3: 0 0% 50%;
+  --chart-4: 0 0% 60%;
+  --chart-5: 0 0% 70%;
 
   --shadow-2xs: 0 1px 2px rgba(0,0,0,0.4);
   --shadow-xs: 0 1px 4px rgba(0,0,0,0.4);
@@ -232,26 +234,6 @@
     font-feature-settings: "rlig" 1, "calt" 1;
     letter-spacing: var(--tracking-normal);
     min-height: 100vh;
-    /* Light mode: very subtle indigo aurora */
-    background-image:
-      radial-gradient(ellipse 70% 40% at 65% -5%, rgba(79,70,229,0.07) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 30% at 5% 85%, rgba(79,70,229,0.04) 0%, transparent 60%);
-  }
-  html.dark body {
-    /* Dark mode: indigo aurora */
-    background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(67,56,202,0.22) 0%, transparent 70%),
-      radial-gradient(ellipse 45% 35% at 85% 88%, rgba(234,179,8,0.05) 0%, transparent 60%),
-      radial-gradient(ellipse 35% 25% at 10% 70%, rgba(67,56,202,0.07) 0%, transparent 60%);
-  }
-
-  .bg-card {
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-  }
-  .bg-sidebar {
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
   }
 }
 
@@ -262,35 +244,32 @@
   letter-spacing: 0;
 }
 
-/* Primary button — indigo gradient */
+/* Primary button — solid green */
 .btn-primary {
-  background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+  background: hsl(var(--primary));
   color: white;
-  box-shadow: 0 0 16px rgba(67,56,202,0.35), 0 2px 6px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   transition: all 0.2s ease;
 }
 .btn-primary:hover {
-  background: linear-gradient(135deg, #818cf8 0%, #4f46e5 100%);
-  box-shadow: 0 0 24px rgba(67,56,202,0.5), 0 4px 10px rgba(0,0,0,0.2);
-  transform: translateY(-1px);
+  background: hsl(142 100% 28%);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
-.btn-primary:active { transform: translateY(0); }
+.btn-primary:active { 
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
 
 .card-hover {
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
-html:not(.dark) .card-hover {
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03);
-}
 html:not(.dark) .card-hover:hover {
-  box-shadow: 0 4px 20px rgba(79,70,229,0.10), 0 0 0 1px rgba(79,70,229,0.12);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border-color: hsl(var(--border));
 }
 html.dark .card-hover:hover {
-  box-shadow: 0 0 0 1px rgba(99,102,241,0.2), 0 8px 32px rgba(0,0,0,0.4);
-}
-
-html.dark .nav-glow {
-  box-shadow: 0 0 14px rgba(99,102,241,0.22);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  border-color: hsl(var(--border));
 }
 
 @layer utilities {

@@ -167,7 +167,7 @@ export function SeasonalTrendsTab() {
               <CardTitle className="text-sm font-medium">Best Score</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-green-600">
+              <p className="text-3xl font-bold text-primary">
                 {athleteResults.length > 0 ? Math.max(...athleteResults.map(r => r.result_score)) : "N/A"}
               </p>
             </CardContent>
@@ -177,7 +177,7 @@ export function SeasonalTrendsTab() {
               <CardTitle className="text-sm font-medium">Avg Score</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-blue-600">
+              <p className="text-3xl font-bold text-secondary">
                 {athleteResults.length > 0 
                   ? Math.round(athleteResults.reduce((sum, r) => sum + r.result_score, 0) / athleteResults.length)
                   : "N/A"}
@@ -189,7 +189,7 @@ export function SeasonalTrendsTab() {
               <CardTitle className="text-sm font-medium">Years Active</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-purple-600">
+              <p className="text-3xl font-bold text-muted-foreground">
                 {yearlyData.length}
               </p>
             </CardContent>
@@ -202,7 +202,7 @@ export function SeasonalTrendsTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             Monthly Performance Trend
-            <TrendingUp className="h-5 w-5 text-blue-600" />
+            <TrendingUp className="h-5 w-5 text-primary" />
           </CardTitle>
           <CardDescription>
             Historical performance with 3-month projection (dotted line)
@@ -235,10 +235,10 @@ export function SeasonalTrendsTab() {
                       const data = payload[0].payload;
                       return (
                         <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-                          <p className="font-semibold">{data.yearMonth}</p>
-                          {data.isProjected ? (
-                            <p className="text-sm text-blue-600">Projected: {data.projectedScore}</p>
-                          ) : (
+                           <p className="font-semibold">{data.yearMonth}</p>
+                           {data.isProjected ? (
+                             <p className="text-sm text-secondary">Projected: {data.projectedScore}</p>
+                           ) : (
                             <>
                               <p className="text-sm">Avg Score: {data.avgScore}</p>
                               <p className="text-sm">Best Score: {data.bestScore}</p>
@@ -255,7 +255,7 @@ export function SeasonalTrendsTab() {
                 <Line 
                   type="monotone" 
                   dataKey="avgScore" 
-                  stroke="#3b82f6" 
+                  stroke="#D8B365" 
                   strokeWidth={2}
                   name="Average Score"
                   dot={{ r: 4 }}
@@ -264,7 +264,7 @@ export function SeasonalTrendsTab() {
                 <Line 
                   type="monotone" 
                   dataKey="bestScore" 
-                  stroke="#10b981" 
+                  stroke="#00A651" 
                   strokeWidth={2}
                   name="Best Score"
                   dot={{ r: 4 }}
@@ -273,11 +273,11 @@ export function SeasonalTrendsTab() {
                 <Line 
                   type="monotone" 
                   dataKey="projectedScore" 
-                  stroke="#8b5cf6" 
+                  stroke="#9CA3AF" 
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   name="Projected (3 months)"
-                  dot={{ r: 4, fill: '#8b5cf6' }}
+                  dot={{ r: 4, fill: '#9CA3AF' }}
                   connectNulls
                 />
               </LineChart>
@@ -325,8 +325,8 @@ export function SeasonalTrendsTab() {
                   }}
                 />
                 <Legend />
-                <Bar dataKey="avgScore" fill="#3b82f6" name="Average Score" />
-                <Bar dataKey="bestScore" fill="#10b981" name="Best Score" />
+                <Bar dataKey="avgScore" fill="#D8B365" name="Average Score" />
+                <Bar dataKey="bestScore" fill="#00A651" name="Best Score" />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -363,12 +363,12 @@ export function SeasonalTrendsTab() {
                     <tr key={year.year} className="border-b hover:bg-muted/50">
                       <td className="p-2 font-medium">{year.year}</td>
                       <td className="p-2">{year.avgScore}</td>
-                      <td className="p-2 text-green-600 font-semibold">{year.bestScore}</td>
+                      <td className="p-2 text-primary font-semibold">{year.bestScore}</td>
                       <td className="p-2">{year.competitions}</td>
                       <td className="p-2">{year.results}</td>
                       <td className="p-2">
                         {growth ? (
-                          <span className={parseFloat(growth) > 0 ? "text-green-600" : "text-red-600"}>
+                          <span className={parseFloat(growth) > 0 ? "text-primary" : "text-destructive"}>
                             {parseFloat(growth) > 0 ? "+" : ""}{growth}%
                           </span>
                         ) : (

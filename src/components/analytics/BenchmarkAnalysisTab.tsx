@@ -18,7 +18,7 @@ export function BenchmarkAnalysisTab() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedEvent, selectedGender]);
 
   async function loadData() {
     setLoading(true);
@@ -45,11 +45,14 @@ export function BenchmarkAnalysisTab() {
 
   // Get RF athlete best marks for the selected event
   const athleteBestMarks = rfAthletes.map(athlete => {
+    // Improved event matching logic
+    const eventPattern = selectedEvent.replace('m', '');
     const athleteResults = rfResults.filter(
       r => r.aa_athlete_id === athlete.aa_athlete_id && 
-           // Match "100m" to "100 Metres", "200m" to "200 Metres", etc.
-           r.discipline.toLowerCase().includes(selectedEvent.toLowerCase().replace('m', ' m')) &&
-           !r.not_legal
+           !r.not_legal &&
+           (r.discipline.includes(`${eventPattern} Metres`) || 
+            r.discipline.includes(`${eventPattern}m`) ||
+            r.discipline.toLowerCase().includes(selectedEvent.toLowerCase()))
     );
     
     if (athleteResults.length === 0) return null;
@@ -97,14 +100,6 @@ export function BenchmarkAnalysisTab() {
 
   return (
     <div className="space-y-4">
-      {/* Info Alert */}
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          Olympic qualification standards data not yet available. Showing Asian Games and Commonwealth Games standards only.
-        </AlertDescription>
-      </Alert>
-
       {/* Filters */}
       <Card>
         <CardHeader>
@@ -214,8 +209,8 @@ export function BenchmarkAnalysisTab() {
                 />
                 <Legend />
                 <ReferenceLine y={0} stroke="#000" strokeDasharray="3 3" />
-                {agQual && <Bar dataKey="agGap" fill="#10b981" name="Asian Games Gap %" />}
-                {cwgQual && <Bar dataKey="cwgGap" fill="#3b82f6" name="Commonwealth Games Gap %" />}
+                {agQual && <Bar dataKey="agGap" fill="#00A651" name="Asian Games Gap %" />}
+                {cwgQual && <Bar dataKey="cwgGap" fill="#D8B365" name="Commonwealth Games Gap %" />}
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -251,23 +246,23 @@ export function BenchmarkAnalysisTab() {
                       <td className="p-2">{athlete.score}</td>
                       <td className="p-2">
                         {athlete.agGap ? (
-                          <span className={parseFloat(athlete.agGap) < 0 ? "text-green-600" : "text-orange-600"}>
+                          <span className={parseFloat(athlete.agGap) < 0 ? "text-primary" : "text-muted-foreground"}>
                             {athlete.agGap}%
                           </span>
                         ) : "N/A"}
                       </td>
                       <td className="p-2">
                         {athlete.cwgGap ? (
-                          <span className={parseFloat(athlete.cwgGap) < 0 ? "text-green-600" : "text-orange-600"}>
+                          <span className={parseFloat(athlete.cwgGap) < 0 ? "text-primary" : "text-muted-foreground"}>
                             {athlete.cwgGap}%
                           </span>
                         ) : "N/A"}
                       </td>
                       <td className="p-2">
                         {athlete.agGap && parseFloat(athlete.agGap) < 0 ? (
-                          <Badge variant="default">Qualified (AG)</Badge>
+                          <Badge className="bg-primary/10 text-primary border-primary/20">Qualified (AG)</Badge>
                         ) : athlete.cwgGap && parseFloat(athlete.cwgGap) < 0 ? (
-                          <Badge variant="secondary">Qualified (CWG)</Badge>
+                          <Badge className="bg-secondary/10 text-secondary border-secondary/20">Qualified (CWG)</Badge>
                         ) : (
                           <Badge variant="outline">In Progress</Badge>
                         )}

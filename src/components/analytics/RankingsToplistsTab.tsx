@@ -14,6 +14,7 @@ export function RankingsToplistsTab() {
   const [rfAthletes, setRfAthletes] = useState<WAAthleteProfile[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("Men's 100m");
   const [selectedGender, setSelectedGender] = useState<string>("M");
+  const [selectedCountry, setSelectedCountry] = useState<string>("all");
   const [showWorld, setShowWorld] = useState(true);
   const [showAsian, setShowAsian] = useState(true);
   const [showIndian, setShowIndian] = useState(true);
@@ -45,10 +46,14 @@ export function RankingsToplistsTab() {
     return rfAthletes.some(rf => rf.reliance_name === athleteName);
   };
 
+  // Get unique countries for filter
+  const uniqueCountries = Array.from(new Set(toplists.map(item => item.nationality))).sort();
+
   const filteredToplists = toplists.filter(item => {
     if (item.region === "Global" && !showWorld) return false;
     if (item.region === "Asia" && !showAsian) return false;
     if (item.nationality === "IND" && !showIndian) return false;
+    if (selectedCountry !== "all" && item.nationality !== selectedCountry) return false;
     return true;
   });
 
@@ -99,6 +104,21 @@ export function RankingsToplistsTab() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Country</Label>
+              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Countries</SelectItem>
+                  {uniqueCountries.map(country => (
+                    <SelectItem key={country} value={country}>{country}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-4">
@@ -115,58 +135,6 @@ export function RankingsToplistsTab() {
               <Label htmlFor="indian">Indian Athletes</Label>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Toplists Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Performers by Score</CardTitle>
-          <CardDescription>
-            Comparing top 20 athletes - RF athletes highlighted in blue
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="h-96 flex items-center justify-center">
-              <p className="text-muted-foreground">Loading data...</p>
-            </div>
-          ) : chartData.length === 0 ? (
-            <div className="h-96 flex items-center justify-center">
-              <p className="text-muted-foreground">No data available for selected filters</p>
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={chartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="name" type="category" width={150} />
-                <Tooltip 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-                          <p className="font-semibold">{data.name}</p>
-                          <p className="text-sm text-muted-foreground">{data.nationality}</p>
-                          <p className="text-sm">Mark: {data.mark}</p>
-                          <p className="text-sm">Score: {data.score}</p>
-                          {data.isRF && <Badge className="mt-1">RF Athlete</Badge>}
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="score" name="Performance Score">
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.isRF ? "#3b82f6" : "#94a3b8"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
         </CardContent>
       </Card>
 
@@ -193,13 +161,13 @@ export function RankingsToplistsTab() {
                 {filteredToplists.slice(0, 50).map((item, index) => (
                   <tr 
                     key={item.id} 
-                    className={`border-b ${isRFAthlete(item.athlete_name) ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}
+                    className={`border-b ${isRFAthlete(item.athlete_name) ? 'bg-primary/5' : ''}`}
                   >
                     <td className="p-2">{index + 1}</td>
                     <td className="p-2 font-medium">
                       {item.athlete_name}
                       {isRFAthlete(item.athlete_name) && (
-                        <Badge variant="secondary" className="ml-2">RF</Badge>
+                        <Badge className="ml-2 bg-primary/10 text-primary border-primary/20">RF</Badge>
                       )}
                     </td>
                     <td className="p-2">{item.nationality}</td>

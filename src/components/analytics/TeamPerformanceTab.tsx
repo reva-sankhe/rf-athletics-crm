@@ -103,7 +103,7 @@ export function TeamPerformanceTab() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10); // Top 10 events
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+  const COLORS = ['#00A651', '#D8B365', '#6B7280', '#9CA3AF', '#4B5563', '#D1D5DB'];
 
   return (
     <div className="space-y-4">
@@ -122,7 +122,7 @@ export function TeamPerformanceTab() {
             <CardTitle className="text-sm font-medium">High Readiness</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-green-600">
+            <p className="text-3xl font-bold text-primary">
               {athleteReadiness.filter(a => a && a.readinessScore >= 80).length}
             </p>
           </CardContent>
@@ -132,7 +132,7 @@ export function TeamPerformanceTab() {
             <CardTitle className="text-sm font-medium">Improving</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-blue-600">
+            <p className="text-3xl font-bold text-secondary">
               {athleteReadiness.filter(a => a && a.trend === "up").length}
             </p>
           </CardContent>
@@ -142,7 +142,7 @@ export function TeamPerformanceTab() {
             <CardTitle className="text-sm font-medium">Needs Attention</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-orange-600">
+            <p className="text-3xl font-bold text-muted-foreground">
               {athleteReadiness.filter(a => a && a.readinessScore < 40).length}
             </p>
           </CardContent>
@@ -187,13 +187,13 @@ export function TeamPerformanceTab() {
                   }}
                 />
                 <Legend />
-                <Bar dataKey="readinessScore" name="Readiness Score" fill="#3b82f6">
+                <Bar dataKey="readinessScore" name="Readiness Score" fill="#00A651">
                   {athleteReadiness.slice(0, 15).map((entry, index) => (
                     <Cell 
                       key={`cell-${index}`} 
-                      fill={entry && entry.readinessScore >= 80 ? '#10b981' : 
-                            entry && entry.readinessScore >= 60 ? '#3b82f6' :
-                            entry && entry.readinessScore >= 40 ? '#f59e0b' : '#ef4444'} 
+                      fill={entry && entry.readinessScore >= 80 ? '#00A651' : 
+                            entry && entry.readinessScore >= 60 ? '#D8B365' :
+                            entry && entry.readinessScore >= 40 ? '#9CA3AF' : '#6B7280'} 
                     />
                   ))}
                 </Bar>
@@ -256,7 +256,7 @@ export function TeamPerformanceTab() {
                   <XAxis dataKey="event" angle={-45} textAnchor="end" height={100} />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="count" name="Athletes" fill="#10b981" />
+                  <Bar dataKey="count" name="Athletes" fill="#00A651" />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -295,9 +295,9 @@ export function TeamPerformanceTab() {
                           <div className="w-24 bg-muted rounded-full h-2">
                             <div 
                               className={`h-2 rounded-full ${
-                                athlete.readinessScore >= 80 ? 'bg-green-600' :
-                                athlete.readinessScore >= 60 ? 'bg-blue-600' :
-                                athlete.readinessScore >= 40 ? 'bg-orange-600' : 'bg-red-600'
+                                athlete.readinessScore >= 80 ? 'bg-primary' :
+                                athlete.readinessScore >= 60 ? 'bg-secondary' :
+                                athlete.readinessScore >= 40 ? 'bg-gray-400' : 'bg-gray-500'
                               }`}
                               style={{ width: `${athlete.readinessScore}%` }}
                             />
@@ -307,15 +307,15 @@ export function TeamPerformanceTab() {
                       </td>
                       <td className="p-2">{athlete.avgRecentScore}</td>
                       <td className="p-2">
-                        {athlete.trend === "up" && <TrendingUp className="h-5 w-5 text-green-600" />}
-                        {athlete.trend === "down" && <TrendingDown className="h-5 w-5 text-red-600" />}
-                        {athlete.trend === "stable" && <Minus className="h-5 w-5 text-gray-600" />}
+                        {athlete.trend === "up" && <TrendingUp className="h-5 w-5 text-primary" />}
+                        {athlete.trend === "down" && <TrendingDown className="h-5 w-5 text-destructive" />}
+                        {athlete.trend === "stable" && <Minus className="h-5 w-5 text-muted-foreground" />}
                       </td>
                       <td className="p-2">
                         {athlete.readinessScore >= 80 ? (
-                          <Badge variant="default" className="bg-green-600">Ready</Badge>
+                          <Badge className="bg-primary/10 text-primary border-primary/20">Ready</Badge>
                         ) : athlete.readinessScore >= 60 ? (
-                          <Badge variant="default">Good</Badge>
+                          <Badge className="bg-secondary/10 text-secondary border-secondary/20">Good</Badge>
                         ) : athlete.readinessScore >= 40 ? (
                           <Badge variant="secondary">Moderate</Badge>
                         ) : (
