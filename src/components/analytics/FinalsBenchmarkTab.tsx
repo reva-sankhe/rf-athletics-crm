@@ -125,58 +125,62 @@ export function FinalsBenchmarkTab() {
   const isHigherBetter = classifyEvent(event).direction === "higher_better";
   const eventNorm = normalizeEventName(event);
 
-  // Filter all finalists down to the selected event
+  // Filter all results to the selected event (client-side discipline match)
   const eventFinalists = allFinalists.filter(
     r => normalizeEventName(r.discipline) === eventNorm
   );
 
-  // Group by race_id → each group is one final
-  const raceGroups = new Map<number, WAResult[]>();
+  // Group by competition_id — each competition is one championship edition
+  const competitionGroups = new Map<number, WAResult[]>();
   eventFinalists.forEach(r => {
-    const arr = raceGroups.get(r.race_id) ?? [];
+    const arr = competitionGroups.get(r.competition_id) ?? [];
     arr.push(r);
-    raceGroups.set(r.race_id, arr);
+    competitionGroups.set(r.competition_id, arr);
   });
 
-  // Derive per-final data
+  // For each competition, reconstruct the final using best-mark-per-place heuristic:
+  // within all heats+semis+final mixed together, the athlete at each place who ran
+  // the best mark IS the finalist (finalists outperform heat runners at same place).
   const finalsDataRaw: FinalData[] = [];
-  raceGroups.forEach(raceResults => {
-    const withMark = raceResults
-      .map(r => ({ ...r, markVal: parseMark(r.mark, event) }))
-      .filter((r): r is typeof r & { markVal: number } => r.markVal !== null && !isNaN(r.markVal));
+  competitionGroups.forEach(compResults => {
+    const year = new Date(compResults[0].race_date).getFullYear();
 
-    if (withMark.length < 2) return;
-
-    const sortedByPlace = [...withMark].sort((a, b) => {
-      const pa = parseInt(a.place);
-      const pb = parseInt(b.place);
-      return (isNaN(pa) ? 999 : pa) - (isNaN(pb) ? 999 : pb);
+    // Build place → best result map (places 1-8 only)
+    const bestPerPlace = new Map<number, { markVal: number; age: number }>();
+    compResults.forEach(r => {
+      const placeNum = parseInt(r.place.replace(/\D/g, ""));
+      if (isNaN(placeNum) || placeNum < 1 || placeNum > 8) return;
+      const markVal = parseMark(r.mark, event);
+      if (markVal === null || isNaN(markVal)) return;
+      const existing = bestPerPlace.get(placeNum);
+      const isBetter = !existing ||
+        (isHigherBetter ? markVal > existing.markVal : markVal < existing.markVal);
+      if (isBetter) bestPerPlace.set(placeNum, { markVal, age: r.athlete_age });
     });
 
-    const validPlaces = sortedByPlace.filter(r => !isNaN(parseInt(r.place)));
-    if (validPlaces.length < 2) return;
+    if (bestPerPlace.size < 2) return;
 
-    const goldResult = validPlaces[0];
-    const lastResult = validPlaces[Math.min(validPlaces.length - 1, 7)];
-    const goldMark = goldResult.markVal;
-    const slowestMark = lastResult.markVal;
-    const spread = Math.abs(goldMark - slowestMark) / Math.abs(goldMark) * 100;
+    const goldEntry = bestPerPlace.get(1);
+    if (!goldEntry) return;
+    const lastPlace = Math.max(...bestPerPlace.keys());
+    const lastEntry = bestPerPlace.get(lastPlace);
+    if (!lastEntry) return;
 
-    const year = new Date(raceResults[0].race_date).getFullYear();
-    const ages = validPlaces
-      .filter(r => r.athlete_age > 0 && r.athlete_age < 60)
-      .map(r => ({ age: r.athlete_age, isMedalist: parseInt(r.place) <= 3 }));
+    const spread = Math.abs(goldEntry.markVal - lastEntry.markVal) / Math.abs(goldEntry.markVal) * 100;
+    const ages = Array.from(bestPerPlace.entries())
+      .filter(([, v]) => v.age > 0 && v.age < 60)
+      .map(([place, v]) => ({ age: v.age, isMedalist: place <= 3 }));
 
     finalsDataRaw.push({
       year,
-      gold: goldMark,
-      slowest: slowestMark,
+      gold: goldEntry.markVal,
+      slowest: lastEntry.markVal,
       spread: parseFloat(spread.toFixed(2)),
       ages,
     });
   });
 
-  // Deduplicate by year — keep the final with more participants per year
+  // One entry per year (in case multiple competitions of same type in same year)
   const yearMap = new Map<number, FinalData>();
   finalsDataRaw.forEach(d => {
     const existing = yearMap.get(d.year);

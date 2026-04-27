@@ -280,19 +280,21 @@ export async function fetchFinalistsForEvent(
 ): Promise<WAResult[]> {
   let compQuery = supabase
     .from("wa_competitions")
-    .select("id")
-    .eq("has_results", true);
+    .select("id");
 
-  if (competition === "All Major") {
-    compQuery = compQuery.or(
-      "name.ilike.%asian games%,name.ilike.%commonwealth%,name.ilike.%world athletics%,name.ilike.%world championships%"
-    );
+  if (competition === "World Championships") {
+    compQuery = compQuery.ilike("competition_group", "%World Athletics Championships%");
   } else if (competition === "Asian Games") {
     compQuery = compQuery.ilike("name", "%asian games%");
   } else if (competition === "Commonwealth Games") {
     compQuery = compQuery.ilike("name", "%commonwealth%");
   } else {
-    compQuery = compQuery.or("name.ilike.%world athletics%,name.ilike.%world championships%");
+    // All Major: World Championships + Asian Games + Commonwealth Games
+    compQuery = compQuery.or(
+      "competition_group.ilike.%World Athletics Championships%," +
+      "name.ilike.%asian games%," +
+      "name.ilike.%commonwealth%"
+    );
   }
 
   const { data: comps, error: compError } = await compQuery;
@@ -304,9 +306,7 @@ export async function fetchFinalistsForEvent(
     .from("wa_results")
     .select("*")
     .in("competition_id", compIds)
-    .ilike("event", "%Final%")
-    .order("race_date", { ascending: false })
-    .limit(3000);
+    .limit(5000);
 
   if (gender) {
     resultQuery = resultQuery.eq("gender", gender);
