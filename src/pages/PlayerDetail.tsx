@@ -4,6 +4,7 @@ import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBes
 import { Skeleton } from "@/components/Skeleton";
 import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent } from "@/lib/types";
 import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 export default function AthleteDetail() {
@@ -148,7 +149,7 @@ export default function AthleteDetail() {
     .sort((a, b) => a.fullDate - b.fullDate);
 
   // Group by discipline for multiple line series
-  const disciplineColors = ['#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
+  const disciplineColors = ['#00A651', '#D8B365', '#f59e0b', '#ef4444', '#3b82f6'];
   const uniqueDisciplines = Array.from(new Set(chartData.map(d => d.discipline)));
   
   // Calculate Y-axis domain (min - 2 to max + 2)
@@ -211,11 +212,7 @@ export default function AthleteDetail() {
           <div>
             <div className="text-xs text-muted-foreground mb-1">Birth Date</div>
             <div className="text-lg font-semibold text-foreground">
-              {athlete.birth_date ? new Date(athlete.birth_date).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              }) : "—"}
+              {athlete.birth_date ? format(parseISO(athlete.birth_date), 'MMMM d, yyyy') : "—"}
             </div>
           </div>
           
@@ -246,7 +243,7 @@ export default function AthleteDetail() {
                   {matchedPersonalBests.map((pb, idx) => (
                     <span key={idx} className="inline-flex items-center gap-2">
                       <span className={`text-sm font-normal ${
-                        pb.is_main_event ? 'text-indigo-400' : 'text-muted-foreground'
+                        pb.is_main_event ? 'text-[#00A651]' : 'text-muted-foreground'
                       }`}>
                         {pb.event_name}:
                       </span>
@@ -256,7 +253,7 @@ export default function AthleteDetail() {
                         {pb.formatted_mark}
                       </span>
                       {pb.is_main_event && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#D8B365]/20 text-[#D8B365] font-semibold">
                           MAIN
                         </span>
                       )}
@@ -282,7 +279,7 @@ export default function AthleteDetail() {
             {events.map((event, idx) => (
               <div 
                 key={idx}
-                className="px-4 py-2 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 font-medium"
+                className="px-4 py-2 rounded-lg bg-[#00A651]/10 border border-[#00A651]/20 text-[#00A651] font-medium"
               >
                 {event}
               </div>
@@ -400,24 +397,24 @@ export default function AthleteDetail() {
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsLineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="#9ca3af"
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="date"
+                  stroke="hsl(var(--muted-foreground))"
                   style={{ fontSize: '12px' }}
                 />
-                <YAxis 
-                  stroke="#9ca3af"
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
                   style={{ fontSize: '12px' }}
                   domain={yAxisDomain}
-                  label={{ value: 'Mark (seconds)', angle: -90, position: 'insideLeft', style: { fill: '#9ca3af' } }}
+                  label={{ value: 'Mark (seconds)', angle: -90, position: 'insideLeft', style: { fill: 'hsl(var(--muted-foreground))' } }}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1f2937', 
-                    border: '1px solid #374151',
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
-                    color: '#f3f4f6'
+                    color: 'hsl(var(--foreground))'
                   }}
                 />
                 <Legend />
@@ -447,13 +444,7 @@ export default function AthleteDetail() {
             Data Information
           </div>
           <div className="text-xs text-muted-foreground">
-            Last updated: {new Date(athlete.scraped_at).toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
+            Last updated: {format(parseISO(athlete.scraped_at), 'MMMM d, yyyy, h:mm a')}
           </div>
         </div>
       )}

@@ -1,57 +1,56 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { RankingsToplistsTab } from "@/components/analytics/RankingsToplistsTab";
-import { BenchmarkAnalysisTab } from "@/components/analytics/BenchmarkAnalysisTab";
-import { AgeAnalysisTab } from "@/components/analytics/AgeAnalysisTab";
-import { TeamPerformanceTab } from "@/components/analytics/TeamPerformanceTab";
-import { SeasonalTrendsTab } from "@/components/analytics/SeasonalTrendsTab";
+import { RFSquadTab } from "@/components/analytics/RFSquadTab";
+import { GlobalStandingsTab } from "@/components/analytics/GlobalStandingsTab";
+import { QualificationTrackerTab } from "@/components/analytics/QualificationTrackerTab";
+import { MedalIntelligenceTab } from "@/components/analytics/MedalIntelligenceTab";
+import { ScoutingRadarTab } from "@/components/analytics/ScoutingRadarTab";
+import { PerformanceTrendsTab } from "@/components/analytics/PerformanceTrendsTab";
 
 export default function Analytics() {
-  const [activeTab, setActiveTab] = useState("rankings");
+  const [activeTab, setActiveTab] = useState("squad");
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            Analytics
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Performance insights and competitive analysis
-          </p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">Analytics</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Performance intelligence for the RF squad
+        </p>
       </div>
 
-      {/* Analytics Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="rankings">Rankings & Toplists</TabsTrigger>
-          <TabsTrigger value="benchmarks">Benchmark Analysis</TabsTrigger>
-          <TabsTrigger value="age">Age Analysis</TabsTrigger>
-          <TabsTrigger value="team">Team Performance</TabsTrigger>
-          <TabsTrigger value="trends">Seasonal Trends</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="squad">RF Squad</TabsTrigger>
+          <TabsTrigger value="standings">Global Standings</TabsTrigger>
+          <TabsTrigger value="qualification">Qualification</TabsTrigger>
+          <TabsTrigger value="medals">Medal Intel</TabsTrigger>
+          <TabsTrigger value="scouting">Scouting</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="rankings" className="space-y-4">
-          <RankingsToplistsTab />
+        <TabsContent value="squad" className="space-y-4">
+          <RFSquadTab />
         </TabsContent>
 
-        <TabsContent value="benchmarks" className="space-y-4">
-          <BenchmarkAnalysisTab />
+        <TabsContent value="standings" className="space-y-4">
+          <GlobalStandingsTab />
         </TabsContent>
 
-        <TabsContent value="age" className="space-y-4">
-          <AgeAnalysisTab />
+        <TabsContent value="qualification" className="space-y-4">
+          <QualificationTrackerTab />
         </TabsContent>
 
-        <TabsContent value="team" className="space-y-4">
-          <TeamPerformanceTab />
+        <TabsContent value="medals" className="space-y-4">
+          <MedalIntelligenceTab />
+        </TabsContent>
+
+        <TabsContent value="scouting" className="space-y-4">
+          <ScoutingRadarTab />
         </TabsContent>
 
         <TabsContent value="trends" className="space-y-4">
-          <SeasonalTrendsTab />
+          <PerformanceTrendsTab />
         </TabsContent>
       </Tabs>
     </div>

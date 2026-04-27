@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils";
 import { type WAAthleteProfile } from "@/lib/types";
 
 const EVENT_COLORS = [
-  { color: "#818cf8", bg: "bg-indigo-400/10" },
-  { color: "#60a5fa", bg: "bg-blue-400/10" },
+  { color: "#00A651", bg: "bg-green-400/10" },
+  { color: "#D8B365", bg: "bg-yellow-400/10" },
   { color: "#34d399", bg: "bg-emerald-400/10" },
   { color: "#fbbf24", bg: "bg-amber-400/10" },
   { color: "#f87171", bg: "bg-red-400/10" },
@@ -96,7 +96,7 @@ export default function Dashboard() {
                   <a
                     key={event}
                     href={`/events/${encodeURIComponent(event)}`}
-                    className="block bg-card border border-border rounded-xl p-4 hover:border-indigo-400 transition-all hover:shadow-md"
+                    className="block bg-card border border-border rounded-xl p-4 hover:border-[#00A651]/50 transition-all hover:shadow-md"
                   >
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-2 h-2 rounded-full" style={{ background: cfg.color }} />
@@ -127,7 +127,7 @@ export default function Dashboard() {
                   <a
                     key={event}
                     href={`/events/${encodeURIComponent(event)}`}
-                    className="block bg-card border border-border rounded-xl p-4 hover:border-indigo-400 transition-all hover:shadow-md"
+                    className="block bg-card border border-border rounded-xl p-4 hover:border-[#00A651]/50 transition-all hover:shadow-md"
                   >
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-2 h-2 rounded-full" style={{ background: cfg.color }} />

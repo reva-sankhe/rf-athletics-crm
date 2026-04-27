@@ -69,7 +69,7 @@ export default function EventDetail() {
         {/* World Record */}
         <div className="bg-card border border-border rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-3">
-            <Trophy size={16} className="text-indigo-400" />
+            <Trophy size={16} className="text-[#00A651]" />
             <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">World Record</div>
           </div>
           <div className="text-2xl font-bold text-foreground mb-1">—</div>
@@ -111,7 +111,7 @@ export default function EventDetail() {
                     >
                       <td className="px-4 py-2.5 font-medium text-foreground">
                         <Link href={`/athletes/${athlete.aa_athlete_id}`}>
-                          <a className="hover:text-indigo-400 transition-colors">
+                          <a className="hover:text-[#00A651] transition-colors">
                             {athlete.reliance_name || "—"}
                           </a>
                         </Link>

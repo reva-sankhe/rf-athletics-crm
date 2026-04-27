@@ -4,7 +4,79 @@ import { TableSkeleton } from "@/components/Skeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { fetchWAAthleteProfiles, getUniqueEvents } from "@/lib/queries";
 import type { WAAthleteProfile } from "@/lib/types";
-import { Users, Search, ChevronRight, ArrowUpDown } from "lucide-react";
+import { Users, Search, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type SortingState,
+} from "@tanstack/react-table";
+
+const columnHelper = createColumnHelper<WAAthleteProfile>();
+
+const columns = [
+  columnHelper.accessor("reliance_name", {
+    header: "Name",
+    enableSorting: true,
+    cell: (info) => {
+      const athlete = info.row.original;
+      return (
+        <Link
+          href={`/athletes/${athlete.aa_athlete_id}`}
+          className="hover:text-[#00A651] transition-colors font-medium"
+          data-testid={`link-athlete-name-${athlete.aa_athlete_id}`}
+        >
+          {info.getValue() || "—"}
+        </Link>
+      );
+    },
+  }),
+  columnHelper.accessor("reliance_events", {
+    header: "Events",
+    enableSorting: false,
+    cell: (info) => {
+      const val = info.getValue();
+      if (!val) return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="flex flex-wrap gap-1">
+          {val.split(",").map((event, idx) => (
+            <span
+              key={idx}
+              className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-[#00A651]/10 text-[#00A651]"
+            >
+              {event.trim()}
+            </span>
+          ))}
+        </div>
+      );
+    },
+  }),
+  columnHelper.accessor("age", {
+    header: "Age",
+    enableSorting: true,
+    cell: (info) => info.getValue() ?? "—",
+  }),
+  columnHelper.accessor("gender", {
+    header: "Gender",
+    enableSorting: true,
+    cell: (info) => info.getValue() ?? "—",
+  }),
+  columnHelper.display({
+    id: "actions",
+    header: "",
+    cell: (info) => (
+      <Link
+        href={`/athletes/${info.row.original.aa_athlete_id}`}
+        className="text-muted-foreground hover:text-primary transition-colors"
+        data-testid={`link-athlete-${info.row.original.aa_athlete_id}`}
+      >
+        <ChevronRight size={14} />
+      </Link>
+    ),
+  }),
+];
 
 export default function Athletes() {
   const [athletes, setAthletes] = useState<WAAthleteProfile[]>([]);
@@ -13,8 +85,7 @@ export default function Athletes() {
   const [filterEvent, setFilterEvent] = useState("");
   const [filterGender, setFilterGender] = useState("");
   const [availableEvents, setAvailableEvents] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<"age" | "gender" | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -23,7 +94,7 @@ export default function Athletes() {
       setAthletes(data);
       setAvailableEvents(getUniqueEvents(data));
     } catch (error) {
-      console.error('Error loading athletes:', error);
+      console.error("Error loading athletes:", error);
       setAthletes([]);
     } finally {
       setLoading(false);
@@ -32,54 +103,26 @@ export default function Athletes() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSort = (column: "age" | "gender") => {
-    if (sortBy === column) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(column);
-      setSortDirection("asc");
-    }
-  };
-
   const filtered = athletes.filter((athlete) => {
-    // Search filter
     if (search) {
-      const searchLower = search.toLowerCase();
-      const nameMatch = athlete.reliance_name?.toLowerCase().includes(searchLower);
-      const idMatch = athlete.aa_athlete_id?.toLowerCase().includes(searchLower);
-      if (!nameMatch && !idMatch) return false;
+      const q = search.toLowerCase();
+      if (!athlete.reliance_name?.toLowerCase().includes(q) && !athlete.aa_athlete_id?.toLowerCase().includes(q)) return false;
     }
-    
-    // Event filter
     if (filterEvent && athlete.reliance_events) {
-      const athleteEvents = athlete.reliance_events.split(',').map(e => e.trim());
-      if (!athleteEvents.includes(filterEvent)) return false;
+      const events = athlete.reliance_events.split(",").map((e) => e.trim());
+      if (!events.includes(filterEvent)) return false;
     }
-    
-    // Gender filter
     if (filterGender && athlete.gender !== filterGender) return false;
-    
     return true;
   });
 
-  // Sort filtered results
-  const sorted = [...filtered].sort((a, b) => {
-    if (!sortBy) return 0;
-    
-    let aVal: any;
-    let bVal: any;
-    
-    if (sortBy === "age") {
-      aVal = a.age ?? -1;
-      bVal = b.age ?? -1;
-    } else if (sortBy === "gender") {
-      aVal = a.gender ?? "";
-      bVal = b.gender ?? "";
-    }
-    
-    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
-    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
-    return 0;
+  const table = useReactTable({
+    data: filtered,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   return (
@@ -87,7 +130,7 @@ export default function Athletes() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            <span className="text-indigo-500 dark:text-indigo-400">Athletes</span>
+            <span className="text-[#00A651]">Athletes</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">{athletes.length} total athletes</p>
         </div>
@@ -133,83 +176,50 @@ export default function Athletes() {
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         {loading ? (
           <div className="p-4"><TableSkeleton rows={8} cols={5} /></div>
-        ) : sorted.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <EmptyState icon={Users} title="No athletes found" description="Try adjusting your filters" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm" data-testid="athletes-table">
               <thead>
-                <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="px-4 py-2.5 text-left font-medium">Name</th>
-                  <th className="px-4 py-2.5 text-left font-medium">Events</th>
-                  <th className="px-4 py-2.5 text-left font-medium">
-                    <button
-                      onClick={() => handleSort("age")}
-                      className="flex items-center gap-1 hover:text-foreground transition-colors"
-                    >
-                      Age
-                      <ArrowUpDown size={12} className={sortBy === "age" ? "text-indigo-400" : ""} />
-                    </button>
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-medium">
-                    <button
-                      onClick={() => handleSort("gender")}
-                      className="flex items-center gap-1 hover:text-foreground transition-colors"
-                    >
-                      Gender
-                      <ArrowUpDown size={12} className={sortBy === "gender" ? "text-indigo-400" : ""} />
-                    </button>
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-medium w-8"></th>
-                </tr>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id} className="border-b border-border text-xs text-muted-foreground">
+                    {headerGroup.headers.map((header) => (
+                      <th key={header.id} className="px-4 py-2.5 text-left font-medium">
+                        {header.column.getCanSort() ? (
+                          <button
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="flex items-center gap-1 hover:text-foreground transition-colors"
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {header.column.getIsSorted() === "asc" ? (
+                              <ArrowUp size={12} className="text-[#00A651]" />
+                            ) : header.column.getIsSorted() === "desc" ? (
+                              <ArrowDown size={12} className="text-[#00A651]" />
+                            ) : (
+                              <ArrowUpDown size={12} />
+                            )}
+                          </button>
+                        ) : (
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
               </thead>
               <tbody>
-                {sorted.map((athlete) => (
-                  <tr 
-                    key={athlete.aa_athlete_id} 
-                    className="border-b border-border/50 hover:bg-muted/30 transition-colors" 
-                    data-testid={`row-athlete-${athlete.aa_athlete_id}`}
+                {table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-border/50 hover:bg-muted/30 transition-colors"
+                    data-testid={`row-athlete-${row.original.aa_athlete_id}`}
                   >
-                    <td className="px-4 py-2.5 font-medium text-foreground">
-                      <Link
-                        href={`/athletes/${athlete.aa_athlete_id}`}
-                        className="hover:text-indigo-400 transition-colors"
-                        data-testid={`link-athlete-name-${athlete.aa_athlete_id}`}
-                      >
-                        {athlete.reliance_name || "—"}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {athlete.reliance_events ? (
-                        <div className="flex flex-wrap gap-1">
-                          {athlete.reliance_events.split(',').map((event, idx) => (
-                            <span 
-                              key={idx}
-                              className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/15 text-indigo-400"
-                            >
-                              {event.trim()}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-foreground">
-                      {athlete.age ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-foreground">
-                      {athlete.gender ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <Link
-                        href={`/athletes/${athlete.aa_athlete_id}`}
-                        className="text-muted-foreground hover:text-primary transition-colors"
-                        data-testid={`link-athlete-${athlete.aa_athlete_id}`}
-                      >
-                        <ChevronRight size={14} />
-                      </Link>
-                    </td>
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-2.5 text-foreground">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

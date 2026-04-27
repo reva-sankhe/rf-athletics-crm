@@ -53,8 +53,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 border",
           active
             ? isDark
-              ? "bg-indigo-600/20 text-indigo-300 nav-glow border-indigo-500/20"
-              : "bg-indigo-50 text-indigo-700 border-indigo-200"
+              ? "bg-[#00A651]/15 text-green-300 nav-glow border-[#00A651]/20"
+              : "bg-green-50 text-green-700 border-green-200"
             : isDark
               ? "text-slate-400 hover:bg-white/5 hover:text-slate-100 border-transparent"
               : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 border-transparent"
@@ -87,8 +87,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="px-4 pt-5 pb-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0">
-              <svg className="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-10 h-10 rounded-lg bg-[#00A651]/10 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-[#00A651]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
@@ -97,7 +97,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 Team Management
               </div>
               <div className="text-base font-medium leading-tight truncate text-foreground">
-                Athlete <span className="text-indigo-500 dark:text-indigo-400">CRM</span>
+                Athlete <span className="text-[#00A651]">CRM</span>
               </div>
             </div>
           </div>
@@ -118,7 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className={cn("h-px mb-3", isDark ? "bg-white/6" : "bg-slate-200")} />
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className={cn("text-[11px]", isDark ? "text-slate-600" : "text-slate-400")}>Athlete CRM · v1.0</span>
+          <span className={cn("text-[11px]", isDark ? "text-slate-600" : "text-slate-400")}>RF Performance · v1.0</span>
         </div>
       </div>
     </div>
