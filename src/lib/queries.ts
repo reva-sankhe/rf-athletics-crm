@@ -273,6 +273,50 @@ export async function fetchWAToplists(event?: string, gender?: string, limit = 1
   return data as WAToplist[];
 }
 
+// WA Finals data (for Finals Benchmark tab)
+export async function fetchFinalistsForEvent(
+  competition = "All Major",
+  gender?: string
+): Promise<WAResult[]> {
+  let compQuery = supabase
+    .from("wa_competitions")
+    .select("id")
+    .eq("has_results", true);
+
+  if (competition === "All Major") {
+    compQuery = compQuery.or(
+      "name.ilike.%asian games%,name.ilike.%commonwealth%,name.ilike.%world athletics%,name.ilike.%world championships%"
+    );
+  } else if (competition === "Asian Games") {
+    compQuery = compQuery.ilike("name", "%asian games%");
+  } else if (competition === "Commonwealth Games") {
+    compQuery = compQuery.ilike("name", "%commonwealth%");
+  } else {
+    compQuery = compQuery.or("name.ilike.%world athletics%,name.ilike.%world championships%");
+  }
+
+  const { data: comps, error: compError } = await compQuery;
+  if (compError || !comps || comps.length === 0) return [];
+
+  const compIds = (comps as { id: number }[]).map(c => c.id);
+
+  let resultQuery = supabase
+    .from("wa_results")
+    .select("*")
+    .in("competition_id", compIds)
+    .ilike("event", "%Final%")
+    .order("race_date", { ascending: false })
+    .limit(3000);
+
+  if (gender) {
+    resultQuery = resultQuery.eq("gender", gender);
+  }
+
+  const { data, error } = await resultQuery;
+  if (error) throw error;
+  return (data ?? []) as WAResult[];
+}
+
 // Helper function to get unique events from all athletes
 export function getUniqueEvents(athletes: WAAthleteProfile[]): string[] {
   const eventsSet = new Set<string>();
