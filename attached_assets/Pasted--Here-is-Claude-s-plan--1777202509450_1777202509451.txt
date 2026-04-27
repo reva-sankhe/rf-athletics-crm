@@ -1,0 +1,148 @@
+ Here is Claude's plan:                                                                                                 
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Analytics Redesign Plan                                                                                                
+                                                        
+ Context
+
+ The current analytics page has 5 tabs (Rankings & Toplists, Benchmark Analysis, Age Analysis, Team Performance,
+ Seasonal Trends) that are generic and not purpose-built for a performance manager's workflow. The user needs a
+ completely redesigned analytics experience focused on: RF athlete score comparison vs global/Asian benchmarks, medal
+ prospect intelligence, qualification gap tracking, scouting, and stakeholder-ready overviews.
+
+ ---
+ Architecture: 6 New Tabs (replacing all 5 old ones)
+
+ Tab 1 — RF Squad (RFSquadTab.tsx)
+
+ The home base — a complete, at-a-glance view of all RF athletes.
+
+ - Summary stat cards: Total athletes, avg WA score (M/F), # qualified for any championship, # improving trend
+ - Athlete table: Name | Event(s) | Age | Best Mark | WA Score (latest) | Trend arrow | Quick status badge
+ - Score distribution chart: Dot/line scatter — all RF athletes plotted by score, color-coded by readiness tier
+ - Data: fetchWAAthleteProfiles(), fetchWARFAthleteResults(undefined, 1000)
+
+ ---
+ Tab 2 — Global Standings (GlobalStandingsTab.tsx)
+
+ Where do RF athletes actually sit against the world and Asia?
+
+ - Filters: Event (all events in toplist data), Year, Region (World / Asia / India)
+ - Ranked list: Full toplist for selected event with RF athletes highlighted with a distinct badge + row color
+ - RF Position callout cards: "Best World rank in this event: #X — Athlete Name"
+ - Score gap line/scatter chart: Top 25 athletes by score plotted on a line, RF athletes marked distinctly with a
+ dot/label, gap to #1 annotated
+ - Data: fetchWAToplists(event, gender, 50), fetchWARankings(), fetchWAAthleteProfiles()
+
+ ---
+ Tab 3 — Qualification Tracker (QualificationTrackerTab.tsx)
+
+ Replaces Benchmark Analysis — more complete, more actionable.
+
+ - Summary row: X athletes qualified AG | Y qualified CWG | Z within 2% (close) | W beyond 2%
+ - All-athletes qualification table: Athlete | Event | Best Mark | AG Standard | AG Gap% | CWG Standard | CWG Gap% |
+ Status badge
+   - Green row = qualified, amber row = within 2%, no highlight = work to do
+ - Gap chart: Line/dot chart — athletes sorted by gap to closest standard, reference line at 0% qualification mark
+ - Filter: By competition (AG / CWG), event, gender
+ - Data: fetchWAQualificationStandards(), fetchWARFAthleteResults(undefined, 500), fetchWAAthleteProfiles()
+
+ ---
+ Tab 4 — Medal Intelligence (MedalIntelligenceTab.tsx)
+
+ NEW — Historical medal analysis to identify who can podium.
+
+ - Filter: Competition (Asian Games / Commonwealth Games), Event, Gender
+ - Age distribution histogram: Ages of historical medal winners for the selected event — from wa_athlete_honours
+ - RF athlete overlay: RF athletes plotted on the same histogram (where their ages sit in the medal-winner window)
+ - Historical winning marks table: Year | Gold mark | Silver mark | Bronze mark (from honours data) — shows what it
+ takes to medal
+ - RF prospects card: For each RF athlete in the event — "In medal age window? Yes/No", "Gap to bronze mark: X%"
+ - Data: fetchAllWAAthleteHonours() (new query, see below), fetchWAAthleteProfiles(), fetchWARFAthleteResults()
+
+ ---
+ Tab 5 — Scouting Radar (ScoutingRadarTab.tsx)
+
+ NEW — Indian athletes NOT in RF who should be on the radar.
+
+ - How it works: Cross-reference wa_toplists (nationality=IND) + wa_results against RF profiles. Anyone IND + not in RF
+  = scouting candidate.
+ - Filters: Event, Age group (U18 / 18-24 / 25+), Score threshold
+ - Scout table: Athlete Name | Event | Age | Score | Mark | Region rank | "Gap to RF best" column
+ - Top prospects highlight: Top 5 non-RF Indian athletes by score with badges
+ - Data: fetchWAToplists(event, gender, 200), fetchWAAthleteProfiles() (to build exclusion list)
+
+ ---
+ Tab 6 — Performance Trends (PerformanceTrendsTab.tsx)
+
+ Enhanced individual athlete deep-dive.
+
+ - Athlete selector: Dropdown of all RF athletes
+ - Score trend chart: Month-by-month WA score for selected athlete (line chart), with season markers
+ - PB progression: Timeline chart showing when each PB was set and by how much
+ - Year-on-year comparison: Multi-line chart comparing avg score per year (one line per year, overlaid)
+ - Competition history table: Date | Competition | Discipline | Mark | Score | Place
+ - Data: fetchWAAthleteProfiles(), fetchWARFAthleteResults(athleteId, 500)
+
+ ---
+ New Query Needed
+
+ Add to /home/runner/workspace/src/lib/queries.ts:
+
+ export async function fetchAllWAAthleteHonours(limit = 500): Promise<WAAthleteHonour[]> {
+   const { data, error } = await supabase
+     .from("wa_athlete_honours")
+     .select("*")
+     .order("date", { ascending: false })
+     .limit(limit);
+   if (error) throw error;
+   return data as WAAthleteHonour[];
+ }
+
+ ---
+ Files
+
+ Create (new):
+
+ - src/components/analytics/RFSquadTab.tsx
+ - src/components/analytics/GlobalStandingsTab.tsx
+ - src/components/analytics/QualificationTrackerTab.tsx
+ - src/components/analytics/MedalIntelligenceTab.tsx
+ - src/components/analytics/ScoutingRadarTab.tsx
+ - src/components/analytics/PerformanceTrendsTab.tsx
+
+     - src/components/analytics/ScoutingRadarTab.tsx
+     - src/components/analytics/PerformanceTrendsTab.tsx
+
+     Modify:
+
+     - src/pages/Analytics.tsx — replace all 5 tab imports and tab structure with 6 new tabs
+     - src/lib/queries.ts — add fetchAllWAAthleteHonours()
+
+     Delete (after new tabs are wired up):
+
+     - src/components/analytics/RankingsToplistsTab.tsx
+     - src/components/analytics/BenchmarkAnalysisTab.tsx
+     - src/components/analytics/AgeAnalysisTab.tsx
+     - src/components/analytics/TeamPerformanceTab.tsx
+     - src/components/analytics/SeasonalTrendsTab.tsx
+
+     ---
+     Tech Notes
+
+     - Keep Recharts (already installed at v2.15.4) for all charts; prefer LineChart and ScatterChart over BarChart —
+     use BarChart only for true count/distribution histograms (e.g. age histogram in Medal Intel)
+     - Keep Shadcn UI / Radix UI components (Card, Badge, Select, Tabs, etc.)
+     - Tab labels: "RF Squad" | "Global Standings" | "Qualification" | "Medal Intel" | "Scouting" | "Trends"
+     - Use timeToSeconds() helper (already in BenchmarkAnalysisTab) — move to a shared util or keep inline
+     - RF athlete identification: cross-reference by reliance_name === athlete_name (same pattern as current code)
+
+     ---
+     Verification
+
+     1. Start dev server, navigate to /analytics
+     2. RF Squad: Confirm all RF athletes appear with scores and trends
+     3. Global Standings: Select "Men's 100m" — confirm RF athletes are highlighted in the ranked list
+     4. Qualification: Confirm table shows gap % for all athletes × events with correct colors
+     5. Medal Intel: Select "Asian Games" + "100m" — confirm age histogram populates and RF athletes appear
+     6. Scouting: Confirm Indian athletes not in RF appear, sorted by score
+     7. Trends: Select an athlete, confirm score chart and competition history populate

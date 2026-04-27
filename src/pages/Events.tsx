@@ -1,18 +1,17 @@
 import { useEffect, useState, useCallback } from "react";
-import { MetricCardSkeleton, ChartSkeleton } from "@/components/Skeleton";
-import { fetchWAAthleteProfiles, getUniqueEvents } from "@/lib/queries";
-import { cn } from "@/lib/utils";
+import { MetricCardSkeleton } from "@/components/Skeleton";
+import { fetchWAAthleteProfiles } from "@/lib/queries";
 import { type WAAthleteProfile } from "@/lib/types";
 
 const EVENT_COLORS = [
-  { color: "#818cf8", bg: "bg-indigo-400/10" },
-  { color: "#60a5fa", bg: "bg-blue-400/10" },
-  { color: "#34d399", bg: "bg-emerald-400/10" },
-  { color: "#fbbf24", bg: "bg-amber-400/10" },
-  { color: "#f87171", bg: "bg-red-400/10" },
-  { color: "#a78bfa", bg: "bg-violet-400/10" },
-  { color: "#2dd4bf", bg: "bg-teal-400/10" },
-  { color: "#fb923c", bg: "bg-orange-400/10" },
+  { color: "#00A651", bg: "bg-primary/10" },
+  { color: "#D8B365", bg: "bg-secondary/10" },
+  { color: "#6B7280", bg: "bg-gray-500/10" },
+  { color: "#9CA3AF", bg: "bg-gray-400/10" },
+  { color: "#00A651", bg: "bg-primary/10" },
+  { color: "#D8B365", bg: "bg-secondary/10" },
+  { color: "#6B7280", bg: "bg-gray-500/10" },
+  { color: "#9CA3AF", bg: "bg-gray-400/10" },
 ];
 
 export default function Events() {
@@ -31,10 +30,9 @@ export default function Events() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Get unique events and count athletes per event, separated by gender
   const womensEventCounts: Record<string, number> = {};
   const mensEventCounts: Record<string, number> = {};
-  
+
   athletes.forEach((athlete) => {
     if (athlete.reliance_events) {
       const events = athlete.reliance_events.split(',').map(e => e.trim());
@@ -47,38 +45,56 @@ export default function Events() {
       });
     }
   });
-  
+
   const womensEvents = Object.entries(womensEventCounts).sort((a, b) => b[1] - a[1]);
   const mensEvents = Object.entries(mensEventCounts).sort((a, b) => b[1] - a[1]);
 
-  // Athletes by gender
   const maleCount = athletes.filter(a => a.gender === 'M').length;
   const femaleCount = athletes.filter(a => a.gender === 'F').length;
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             RF Events
           </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Overview of athlete performance and events</p>
         </div>
       </div>
 
-      {/* Top stat strip */}
-      <div className="max-w-xs border border-border rounded-2xl overflow-hidden bg-card">
-        {loading ? (
-          <MetricCardSkeleton />
-        ) : (
-          <div className="p-4">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Total Athletes</div>
-            <div className="text-2xl font-bold text-foreground">{athletes.length}</div>
-            <div className="text-[11px] text-muted-foreground mt-1">
-              {femaleCount} female · {maleCount} male
-            </div>
-          </div>
-        )}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="border border-border rounded-lg overflow-hidden bg-card p-4">
+          {loading ? (
+            <MetricCardSkeleton />
+          ) : (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Total Athletes</div>
+              <div className="text-3xl font-bold text-foreground">{athletes.length}</div>
+            </>
+          )}
+        </div>
+        <div className="border border-border rounded-lg overflow-hidden bg-card p-4">
+          {loading ? (
+            <MetricCardSkeleton />
+          ) : (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Female Athletes</div>
+              <div className="text-3xl font-bold text-foreground">{femaleCount}</div>
+            </>
+          )}
+        </div>
+        <div className="border border-border rounded-lg overflow-hidden bg-card p-4">
+          {loading ? (
+            <MetricCardSkeleton />
+          ) : (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Male Athletes</div>
+              <div className="text-3xl font-bold text-foreground">{maleCount}</div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Women's Events */}
@@ -95,15 +111,15 @@ export default function Events() {
                   <a
                     key={event}
                     href={`/events/${encodeURIComponent(event)}`}
-                    className="block bg-card border border-border rounded-xl p-4 hover:border-indigo-400 transition-all hover:shadow-md"
+                    className="block bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-all hover:shadow-sm"
                   >
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: cfg.color }} />
                       <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground truncate" title={event}>
                         {event}
                       </div>
                     </div>
-                    <div className="text-2xl font-bold" style={{ color: cfg.color }}>{count}</div>
+                    <div className="text-2xl font-bold text-foreground">{count}</div>
                   </a>
                 );
               })
@@ -126,15 +142,15 @@ export default function Events() {
                   <a
                     key={event}
                     href={`/events/${encodeURIComponent(event)}`}
-                    className="block bg-card border border-border rounded-xl p-4 hover:border-indigo-400 transition-all hover:shadow-md"
+                    className="block bg-card border border-border rounded-lg p-3 hover:border-primary/30 transition-all hover:shadow-sm"
                   >
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-2 mb-2">
                       <div className="w-2 h-2 rounded-full" style={{ background: cfg.color }} />
                       <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground truncate" title={event}>
                         {event}
                       </div>
                     </div>
-                    <div className="text-2xl font-bold" style={{ color: cfg.color }}>{count}</div>
+                    <div className="text-2xl font-bold text-foreground">{count}</div>
                   </a>
                 );
               })

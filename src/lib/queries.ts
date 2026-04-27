@@ -69,7 +69,17 @@ export async function fetchWAAthleteProfile(id: string): Promise<WAAthleteProfil
   return data as WAAthleteProfile;
 }
 
-// WA Athlete Honours
+// WA Athlete Honours (all athletes)
+export async function fetchAllWAAthleteHonours(limit = 1000): Promise<WAAthleteHonour[]> {
+  const { data, error } = await supabase
+    .from("wa_athlete_honours")
+    .select("*")
+    .order("date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data as WAAthleteHonour[];
+}
+
 export async function fetchWAAthleteHonours(athleteId: string): Promise<WAAthleteHonour[]> {
   const { data, error } = await supabase
     .from("wa_athlete_honours")

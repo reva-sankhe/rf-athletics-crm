@@ -9,7 +9,10 @@
       "Bash(grep -E \"\\\\.\\(ts|sql\\)$\")",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(echo \"EXIT:$?\")",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(npm install *)"
     ]
   }
 }

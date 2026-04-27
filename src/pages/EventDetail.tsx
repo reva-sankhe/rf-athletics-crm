@@ -429,7 +429,7 @@ export default function EventDetail() {
                     >
                       <td className="px-4 py-2.5 font-medium text-foreground">
                         <Link href={`/athletes/${athlete.aa_athlete_id}`}>
-                          <a className="hover:text-indigo-400 transition-colors">
+                          <a className="hover:text-[#00A651] transition-colors">
                             {athlete.reliance_name || "—"}
                           </a>
                         </Link>

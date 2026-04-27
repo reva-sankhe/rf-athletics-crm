@@ -4,6 +4,7 @@ import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBes
 import { Skeleton } from "@/components/Skeleton";
 import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking } from "@/lib/types";
 import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart, X } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 export default function AthleteDetail() {
@@ -247,7 +248,7 @@ export default function AthleteDetail() {
   const chartData = Object.values(chartDataByYear).sort((a, b) => parseInt(a.year) - parseInt(b.year));
 
   // Group by discipline for multiple line series
-  const disciplineColors = ['#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
+  const disciplineColors = ['#00A651', '#D8B365', '#f59e0b', '#ef4444', '#3b82f6'];
   const uniqueDisciplines = Array.from(new Set(chartData.map(d => d.discipline)));
   
   // Calculate Y-axis domain (min - 2 to max + 2)
@@ -310,11 +311,7 @@ export default function AthleteDetail() {
           <div>
             <div className="text-xs text-muted-foreground mb-1">Birth Date</div>
             <div className="text-lg font-semibold text-foreground">
-              {athlete.birth_date ? new Date(athlete.birth_date).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              }) : "—"}
+              {athlete.birth_date ? format(parseISO(athlete.birth_date), 'MMMM d, yyyy') : "—"}
             </div>
           </div>
           
@@ -346,7 +343,7 @@ export default function AthleteDetail() {
             </div>
           </div>
           
-          <div className="sm:col-span-2 lg:col-span-4">
+          <div className="sm:col-span-2 lg:grid-cols-4">
             <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
               <Target size={12} />
               Events
@@ -626,13 +623,7 @@ export default function AthleteDetail() {
             Data Information
           </div>
           <div className="text-xs text-muted-foreground">
-            Last updated: {new Date(athlete.scraped_at).toLocaleString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
+            Last updated: {format(parseISO(athlete.scraped_at), 'MMMM d, yyyy, h:mm a')}
           </div>
         </div>
       )}
