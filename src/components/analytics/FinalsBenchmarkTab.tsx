@@ -86,7 +86,7 @@ export function FinalsBenchmarkTab() {
   const [rfLoading, setRfLoading] = useState(true);
   const [competition, setCompetition] = useState("All Major");
   const [event, setEvent] = useState("100m");
-  const [gender, setGender] = useState("All");
+  const [gender, setGender] = useState("M");
 
   useEffect(() => { loadFinalists(); }, [competition, gender]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadRFData(); }, []); // eslint-disable-line react-hooks/exhaustive-deps

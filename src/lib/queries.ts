@@ -291,34 +291,48 @@ export async function fetchFinalistsForEvent(
   competition = "All Major",
   gender?: string
 ): Promise<WAResult[]> {
-  let compQuery = supabase
-    .from("wa_competitions")
-    .select("id");
+  // Use separate .ilike() queries per competition type — avoids .or() wildcard encoding issues
+  const compIds: number[] = [];
 
-  if (competition === "World Championships") {
-    compQuery = compQuery.ilike("competition_group", "%World Athletics Championships%");
-  } else if (competition === "Asian Games") {
-    compQuery = compQuery.ilike("name", "%asian games%");
-  } else if (competition === "Commonwealth Games") {
-    compQuery = compQuery.ilike("name", "%commonwealth%");
-  } else {
-    // All Major: World Championships + Asian Games + Commonwealth Games
-    compQuery = compQuery.or(
-      "competition_group.ilike.%World Athletics Championships%," +
-      "name.ilike.%asian games%," +
-      "name.ilike.%commonwealth%"
-    );
+  if (competition === "World Championships" || competition === "All Major") {
+    const { data } = await supabase
+      .from("wa_competitions")
+      .select("id")
+      .ilike("competition_group", "%World Athletics Championships%");
+    (data ?? []).forEach((c: { id: number }) => compIds.push(c.id));
   }
 
-  const { data: comps, error: compError } = await compQuery;
-  if (compError || !comps || comps.length === 0) return [];
+  if (competition === "Asian Games" || competition === "All Major") {
+    // Restrict to actual Asian Games (competition_group = "Area Senior Games") to exclude SE Asian Games and trials
+    const { data } = await supabase
+      .from("wa_competitions")
+      .select("id")
+      .eq("competition_group", "Area Senior Games")
+      .ilike("name", "%asian games%");
+    (data ?? []).forEach((c: { id: number }) => compIds.push(c.id));
+  }
 
-  const compIds = (comps as { id: number }[]).map(c => c.id);
+  if (competition === "Commonwealth Games" || competition === "All Major") {
+    const { data } = await supabase
+      .from("wa_competitions")
+      .select("id")
+      .ilike("name", "%commonwealth games%")
+      .not("name", "ilike", "%qualifier%")
+      .not("name", "ilike", "%trial%")
+      .not("name", "ilike", "%youth%")
+      .not("name", "ilike", "%invitational%")
+      .not("name", "ilike", "%anniversary%");
+    (data ?? []).forEach((c: { id: number }) => compIds.push(c.id));
+  }
+
+  if (compIds.length === 0) return [];
+
+  const uniqueIds = [...new Set(compIds)];
 
   let resultQuery = supabase
     .from("wa_results")
     .select("*")
-    .in("competition_id", compIds)
+    .in("competition_id", uniqueIds)
     .limit(5000);
 
   if (gender) {
