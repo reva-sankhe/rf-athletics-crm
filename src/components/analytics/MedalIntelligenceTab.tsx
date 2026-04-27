@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { fetchAllWAAthleteHonours, fetchWAAthleteProfiles, fetchWARFAthleteResults } from "@/lib/queries";
@@ -252,21 +252,20 @@ export function MedalIntelligenceTab() {
           <div className="flex flex-wrap gap-4">
             <div className="space-y-1.5 min-w-[200px]">
               <Label className="text-xs">Competition</Label>
-              <Select value={competition} onValueChange={setCompetition}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {COMPETITIONS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={competition}
+                onValueChange={setCompetition}
+                options={COMPETITIONS.map(c => ({ value: c, label: c }))}
+              />
             </div>
             <div className="space-y-1.5 min-w-[140px]">
               <Label className="text-xs">Event</Label>
-              <Select value={event} onValueChange={setEvent}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EVENTS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={event}
+                onValueChange={setEvent}
+                options={EVENTS.map(e => ({ value: e, label: e }))}
+                searchPlaceholder="Search events…"
+              />
             </div>
           </div>
         </CardContent>

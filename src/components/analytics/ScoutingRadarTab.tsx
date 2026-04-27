@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -154,12 +154,12 @@ export function ScoutingRadarTab() {
           <div className="flex flex-wrap gap-4 items-end">
             <div className="space-y-1.5 min-w-[180px]">
               <Label className="text-xs">Event</Label>
-              <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EVENTS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={selectedEvent}
+                onValueChange={setSelectedEvent}
+                options={EVENTS.map(e => ({ value: e, label: e }))}
+                searchPlaceholder="Search events…"
+              />
             </div>
             <div className="space-y-1.5 min-w-[140px]">
               <Label className="text-xs">Min Score</Label>

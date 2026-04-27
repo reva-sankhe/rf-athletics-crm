@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { fetchWAToplists, fetchWAAthleteProfiles } from "@/lib/queries";
 import type { WAToplist, WAAthleteProfile } from "@/lib/types";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Medal } from "lucide-react";
+import { Medal, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { classifyEvent } from "@/lib/eventUtils";
 
 const EVENTS = [
   "Men's 100m", "Men's 110m Hurdles", "Men's 200m", "Men's 400m", "Men's 400m Hurdles",
@@ -33,6 +34,7 @@ export function GlobalStandingsTab() {
   const [rfAthletes, setRFAthletes] = useState<WAAthleteProfile[]>([]);
   const [selectedEvent, setSelectedEvent] = useState("Men's 100m");
   const [selectedRegion, setSelectedRegion] = useState("all");
+  const [sortMode, setSortMode] = useState<"score" | "mark">("score");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadData(); }, [selectedEvent]);
@@ -57,13 +59,41 @@ export function GlobalStandingsTab() {
   const rfNamesLower = new Set(rfAthletes.map(a => a.reliance_name.toLowerCase()));
   const isRF = (name: string) => rfNamesLower.has(name.toLowerCase());
 
-  const filtered = toplists.filter(t => {
+  const eventDirection = classifyEvent(selectedEvent).direction;
+
+  function parseMarkNum(markStr: string): number {
+    const cleaned = markStr.replace(/\s*\([^)]*\)/g, "").trim();
+    if (eventDirection === "lower_better") {
+      const t = cleaned.replace(/[^0-9:.]/g, "");
+      if (!t) return Infinity;
+      const parts = t.split(/[:.]/).map(Number);
+      if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 100;
+      if (parts.length === 2) return parts[0] + parts[1] / 100;
+      return parseFloat(t) || Infinity;
+    }
+    return parseFloat(cleaned.replace(/[^0-9.]/g, "")) || -Infinity;
+  }
+
+  const regionFiltered = toplists.filter(t => {
     if (selectedRegion === "asia") return t.region === "Asia";
     if (selectedRegion === "india") return t.nationality === "IND";
     return true;
   });
 
-  const top25 = filtered.slice(0, 25);
+  const filtered = [...regionFiltered].sort((a, b) => {
+    if (sortMode === "mark") {
+      const aVal = parseMarkNum(a.mark);
+      const bVal = parseMarkNum(b.mark);
+      return eventDirection === "lower_better" ? aVal - bVal : bVal - aVal;
+    }
+    // Default: sort by WA score descending
+    return (parseInt(b.score) || 0) - (parseInt(a.score) || 0);
+  });
+
+  // Chart always uses score order (top 25 by score)
+  const top25 = [...regionFiltered]
+    .sort((a, b) => (parseInt(b.score) || 0) - (parseInt(a.score) || 0))
+    .slice(0, 25);
 
   const chartData = top25.map((item, i) => ({
     position: i + 1,
@@ -89,23 +119,24 @@ export function GlobalStandingsTab() {
           <div className="flex flex-wrap gap-4">
             <div className="space-y-1.5 min-w-[180px]">
               <Label className="text-xs">Event</Label>
-              <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EVENTS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={selectedEvent}
+                onValueChange={setSelectedEvent}
+                options={EVENTS.map(e => ({ value: e, label: e }))}
+                searchPlaceholder="Search events…"
+              />
             </div>
             <div className="space-y-1.5 min-w-[150px]">
               <Label className="text-xs">Region</Label>
-              <Select value={selectedRegion} onValueChange={setSelectedRegion}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Regions</SelectItem>
-                  <SelectItem value="asia">Asia</SelectItem>
-                  <SelectItem value="india">India Only</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={selectedRegion}
+                onValueChange={setSelectedRegion}
+                options={[
+                  { value: "all", label: "All Regions" },
+                  { value: "asia", label: "Asia" },
+                  { value: "india", label: "India Only" },
+                ]}
+              />
             </div>
           </div>
         </CardContent>
@@ -227,7 +258,7 @@ export function GlobalStandingsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Full Rankings</CardTitle>
-          <CardDescription>RF athletes highlighted in blue</CardDescription>
+          <CardDescription>RF athletes highlighted · click Mark or Score header to sort</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -237,8 +268,30 @@ export function GlobalStandingsTab() {
                   <th className="text-left p-2">Pos</th>
                   <th className="text-left p-2">Athlete</th>
                   <th className="text-left p-2">Country</th>
-                  <th className="text-right p-2">Mark</th>
-                  <th className="text-right p-2">Score</th>
+                  <th className="text-right p-2">
+                    <button
+                      onClick={() => setSortMode("mark")}
+                      className={`flex items-center gap-1 ml-auto transition-colors hover:text-foreground ${sortMode === "mark" ? "text-foreground font-semibold" : ""}`}
+                    >
+                      Mark
+                      {sortMode === "mark"
+                        ? (eventDirection === "lower_better"
+                          ? <ArrowUp size={11} />
+                          : <ArrowDown size={11} />)
+                        : <ArrowUpDown size={11} className="opacity-40" />}
+                    </button>
+                  </th>
+                  <th className="text-right p-2">
+                    <button
+                      onClick={() => setSortMode("score")}
+                      className={`flex items-center gap-1 ml-auto transition-colors hover:text-foreground ${sortMode === "score" ? "text-foreground font-semibold" : ""}`}
+                    >
+                      Score
+                      {sortMode === "score"
+                        ? <ArrowDown size={11} />
+                        : <ArrowUpDown size={11} className="opacity-40" />}
+                    </button>
+                  </th>
                   <th className="text-left p-2">Region</th>
                 </tr>
               </thead>
@@ -256,8 +309,8 @@ export function GlobalStandingsTab() {
                         {rfFlag && <Badge variant="secondary" className="ml-2 text-xs">RF</Badge>}
                       </td>
                       <td className="p-2 text-muted-foreground">{item.nationality}</td>
-                      <td className="p-2 text-right font-mono">{item.mark}</td>
-                      <td className="p-2 text-right">{item.score}</td>
+                      <td className={`p-2 text-right font-mono ${sortMode === "mark" ? "font-semibold" : ""}`}>{item.mark}</td>
+                      <td className={`p-2 text-right ${sortMode === "score" ? "font-semibold" : ""}`}>{item.score}</td>
                       <td className="p-2">
                         <Badge variant="outline" className="text-xs">{item.region}</Badge>
                       </td>

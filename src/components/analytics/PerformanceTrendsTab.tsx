@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { fetchWAAthleteProfiles, fetchWARFAthleteResults } from "@/lib/queries";
@@ -104,16 +104,13 @@ export function PerformanceTrendsTab() {
         <CardContent className="pt-4">
           <div className="space-y-1.5 max-w-xs">
             <Label className="text-xs">Athlete</Label>
-            <Select value={selectedId} onValueChange={setSelectedId}>
-              <SelectTrigger><SelectValue placeholder="Select athlete" /></SelectTrigger>
-              <SelectContent>
-                {athletes.map(a => (
-                  <SelectItem key={a.aa_athlete_id} value={a.aa_athlete_id}>
-                    {a.reliance_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={selectedId}
+              onValueChange={setSelectedId}
+              options={athletes.map(a => ({ value: a.aa_athlete_id, label: a.reliance_name }))}
+              placeholder="Select athlete"
+              searchPlaceholder="Search athletes…"
+            />
           </div>
         </CardContent>
       </Card>

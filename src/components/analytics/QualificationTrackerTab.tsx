@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { fetchWAQualificationStandards, fetchWARFAthleteResults, fetchWAAthleteProfiles } from "@/lib/queries";
@@ -232,31 +232,28 @@ export function QualificationTrackerTab() {
           <div className="flex flex-wrap gap-4">
             <div className="space-y-1.5 min-w-[200px]">
               <Label className="text-xs">Event</Label>
-              <Select value={filterEvent} onValueChange={setFilterEvent}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Events</SelectItem>
-                  {EVENT_GROUPS.map(group => (
-                    <div key={group.label}>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">{group.label}</div>
-                      {group.events.map(e => (
-                        <SelectItem key={e} value={e}>{e}</SelectItem>
-                      ))}
-                    </div>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterEvent}
+                onValueChange={setFilterEvent}
+                options={[{ value: "all", label: "All Events" }]}
+                groups={EVENT_GROUPS.map(g => ({
+                  label: g.label,
+                  options: g.events.map(e => ({ value: e, label: e })),
+                }))}
+                searchPlaceholder="Search events…"
+              />
             </div>
             <div className="space-y-1.5 min-w-[140px]">
               <Label className="text-xs">Gender</Label>
-              <Select value={filterGender} onValueChange={setFilterGender}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="M">Men</SelectItem>
-                  <SelectItem value="F">Women</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={filterGender}
+                onValueChange={setFilterGender}
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "M", label: "Men" },
+                  { value: "F", label: "Women" },
+                ]}
+              />
             </div>
           </div>
         </CardContent>
