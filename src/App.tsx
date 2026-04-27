@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { TeamProvider } from "@/context/TeamContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { Layout } from "@/components/Layout";
-import Dashboard from "@/pages/Dashboard";
+import Events from "@/pages/Events";
 import Athletes from "@/pages/Players";
 import AthleteDetail from "@/pages/PlayerDetail";
 import EventDetail from "@/pages/EventDetail";
@@ -18,7 +18,7 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={Events} />
         <Route path="/athletes" component={Athletes} />
         <Route path="/athletes/:id" component={AthleteDetail} />
         <Route path="/events/:event" component={EventDetail} />

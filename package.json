@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "start": "npx serve dist -s -l ${PORT:-3000}",
-    "reconcile": "tsx scripts/reconcile-data.ts"
+    "reconcile": "tsx scripts/reconcile-data.ts",
+    "audit-events": "tsx scripts/audit-event-names.ts",
+    "map-events": "tsx scripts/create-event-mapping.ts",
+    "list-duplicate-pbs": "tsx scripts/list-duplicate-pbs.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",

@@ -96,47 +96,35 @@ export function formatPerformance(mark: string | null, eventName: string): strin
 export function normalizeEventName(eventName: string): string {
   return eventName
     .toLowerCase()
-    .replace(/men's\s*/gi, '')
-    .replace(/women's\s*/gi, '')
-    .replace(/\s*metres?\s*/gi, 'm')
-    .replace(/\s+/g, '')
+    .replace(/^men's\s+/gi, '')      // Remove "Men's " prefix at start
+    .replace(/^women's\s+/gi, '')    // Remove "Women's " prefix at start
+    .replace(/^mixed\s+/gi, '')      // Remove "Mixed " prefix at start
+    .replace(/\s*metres?\s*/gi, 'm') // Convert "metres" to "m"
+    .replace(/\s+/g, ' ')            // Normalize whitespace to single space
     .trim();
 }
 
 /**
  * Checks if a personal best discipline matches an athlete's event
+ * Uses exact matching to prevent incorrect associations (e.g., "100m" vs "100m Hurdles")
  */
 export function isEventMatch(discipline: string, athleteEvent: string): boolean {
   if (!discipline || !athleteEvent) return false;
   
-  const normalizedDiscipline = normalizeEventName(discipline);
-  const normalizedEvent = normalizeEventName(athleteEvent);
+  const normalized1 = normalizeEventName(discipline);
+  const normalized2 = normalizeEventName(athleteEvent);
   
-  // Exact match
-  if (normalizedDiscipline === normalizedEvent) return true;
+  // Exact match - primary matching strategy
+  if (normalized1 === normalized2) return true;
   
-  // Partial match (one contains the other)
-  if (normalizedDiscipline.includes(normalizedEvent) || 
-      normalizedEvent.includes(normalizedDiscipline)) {
-    return true;
-  }
+  // Allow equipment/specification variations to match base event
+  // e.g., "100m hurdles (76.2cm)" should match "100m hurdles"
+  // but "100m" should NOT match "100m hurdles"
+  const withoutSpecs1 = normalized1.replace(/\s*\([^)]*\)/g, '').trim();
+  const withoutSpecs2 = normalized2.replace(/\s*\([^)]*\)/g, '').trim();
   
-  // Special case: hurdles events of different distances are related
-  if (normalizedDiscipline.includes('hurdles') && normalizedEvent.includes('hurdles')) {
-    return true;
-  }
+  if (withoutSpecs1 === withoutSpecs2) return true;
   
-  // Special case: sprints (100m, 200m, 400m)
-  const sprintPattern = /^(100|200|400)m$/;
-  if (sprintPattern.test(normalizedDiscipline) && sprintPattern.test(normalizedEvent)) {
-    return true;
-  }
-  
-  // Special case: middle distance (800m, 1500m)
-  const middleDistancePattern = /^(800|1500)m$/;
-  if (middleDistancePattern.test(normalizedDiscipline) && middleDistancePattern.test(normalizedEvent)) {
-    return true;
-  }
-  
+  // No fuzzy matching - events must match exactly
   return false;
 }

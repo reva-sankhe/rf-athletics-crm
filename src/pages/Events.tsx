@@ -15,7 +15,7 @@ const EVENT_COLORS = [
   { color: "#fb923c", bg: "bg-orange-400/10" },
 ];
 
-export default function Dashboard() {
+export default function Events() {
   const [athletes, setAthletes] = useState<WAAthleteProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -61,9 +61,8 @@ export default function Dashboard() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            Athlete Dashboard
+            RF Events
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{athletes.length} total athletes</p>
         </div>
       </div>
 

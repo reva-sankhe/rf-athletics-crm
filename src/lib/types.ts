@@ -59,6 +59,49 @@ export interface PersonalBestWithEvent extends WAAthletePersonalBest {
   formatted_mark: string;
 }
 
+export interface EventBenchmark {
+  id: string;
+  event_name: string;
+  gender: 'M' | 'F' | null;
+  
+  // Qualification Standards
+  asian_games_qual_standard: string | null;
+  commonwealth_games_qual_standard: string | null;
+  
+  // Olympic Games Medal Data
+  olympic_gold_result: string | null;
+  olympic_gold_age: number | null;
+  olympic_silver_result: string | null;
+  olympic_silver_age: number | null;
+  olympic_bronze_result: string | null;
+  olympic_bronze_age: number | null;
+  
+  // Asian Games Medal Data
+  asian_games_gold_result: string | null;
+  asian_games_gold_age: number | null;
+  asian_games_silver_result: string | null;
+  asian_games_silver_age: number | null;
+  asian_games_bronze_result: string | null;
+  asian_games_bronze_age: number | null;
+  
+  // Commonwealth Games Medal Data
+  cwg_gold_result: string | null;
+  cwg_gold_age: number | null;
+  cwg_silver_result: string | null;
+  cwg_silver_age: number | null;
+  cwg_bronze_result: string | null;
+  cwg_bronze_age: number | null;
+  
+  // RF Internal Target
+  rf_target: string | null;
+  rf_target_notes: string | null;
+  
+  // Metadata
+  created_at: string;
+  updated_at: string;
+  updated_by: string | null;
+}
+
 export interface WAAthleteIdMap {
   result_athlete_id: string;
   aa_athlete_id: string;

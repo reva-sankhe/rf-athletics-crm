@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/ThemeContext";
 
 const navItems = [
-  { href: "/",          label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/",          label: "Events",       icon: LayoutDashboard },
   { href: "/athletes",  label: "Athletes",     icon: Users           },
   { href: "/analytics", label: "Analytics",    icon: BarChart2       },
 ];
@@ -19,7 +19,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const currentLabel = navItems.find(
     (item) => location === item.href || (item.href !== "/" && location.startsWith(item.href))
-  )?.label ?? "Dashboard";
+  )?.label ?? "Events";
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -93,9 +93,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </svg>
             </div>
             <div className="min-w-0">
-              <div className={cn("text-[10px] font-semibold uppercase tracking-[0.14em]", isDark ? "text-slate-500" : "text-slate-400")}>
-                Team Management
-              </div>
               <div className="text-base font-medium leading-tight truncate text-foreground">
                 Athlete <span className="text-indigo-500 dark:text-indigo-400">CRM</span>
               </div>

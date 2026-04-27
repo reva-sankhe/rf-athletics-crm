@@ -13,7 +13,8 @@ import type {
   WARanking,
   WAResult,
   WARFAthleteResult,
-  WAToplist
+  WAToplist,
+  EventBenchmark
 } from "./types";
 import { isEventMatch, formatPerformance } from "./eventUtils";
 
@@ -209,6 +210,18 @@ export async function fetchWARankings(eventGroup?: string, limit = 100): Promise
   return data as WARanking[];
 }
 
+// Fetch rankings for a specific athlete by name
+export async function fetchAthleteRankings(athleteName: string): Promise<WARanking[]> {
+  const { data, error } = await supabase
+    .from("wa_rankings")
+    .select("*")
+    .ilike("athlete_name", athleteName)
+    .order("rank");
+  
+  if (error) throw error;
+  return data as WARanking[];
+}
+
 // WA Results
 export async function fetchWAResults(competitionId?: number, limit = 100): Promise<WAResult[]> {
   let query = supabase
@@ -261,6 +274,95 @@ export async function fetchWAToplists(event?: string, gender?: string, limit = 1
   const { data, error } = await query;
   if (error) throw error;
   return data as WAToplist[];
+}
+
+// Event Benchmarks
+export async function fetchEventBenchmark(eventName: string): Promise<EventBenchmark | null> {
+  const { data, error } = await supabase
+    .from("event_benchmarks")
+    .select("*")
+    .eq("event_name", eventName)
+    .single();
+  
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // No rows returned - this is expected if benchmark doesn't exist yet
+      return null;
+    }
+    throw error;
+  }
+  return data as EventBenchmark;
+}
+
+export async function fetchAllEventBenchmarks(): Promise<EventBenchmark[]> {
+  const { data, error } = await supabase
+    .from("event_benchmarks")
+    .select("*")
+    .order("event_name");
+  
+  if (error) throw error;
+  return data as EventBenchmark[];
+}
+
+export async function upsertEventBenchmark(
+  benchmark: Omit<EventBenchmark, 'id' | 'created_at' | 'updated_at' | 'gender'>
+): Promise<EventBenchmark> {
+  const { data, error } = await supabase
+    .from("event_benchmarks")
+    .upsert(benchmark, { onConflict: 'event_name' })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as EventBenchmark;
+}
+
+export async function deleteEventBenchmark(eventName: string): Promise<void> {
+  const { error } = await supabase
+    .from("event_benchmarks")
+    .delete()
+    .eq("event_name", eventName);
+  
+  if (error) throw error;
+}
+
+// Fetch personal bests for multiple athletes for a specific event
+export async function fetchPersonalBestsForEvent(
+  athleteIds: string[],
+  eventName: string
+): Promise<Map<string, WAAthletePersonalBest>> {
+  if (athleteIds.length === 0) {
+    return new Map();
+  }
+
+  try {
+    // Fetch all personal bests for these athletes
+    const { data, error } = await supabase
+      .from("wa_athlete_pbs")
+      .select("*")
+      .in("aa_athlete_id", athleteIds);
+
+    if (error) throw error;
+
+    const pbs = data as WAAthletePersonalBest[];
+    const resultMap = new Map<string, WAAthletePersonalBest>();
+
+    // Match each athlete's PB to the specific event
+    for (const pb of pbs) {
+      if (pb.discipline && isEventMatch(pb.discipline, eventName)) {
+        // Only store if we don't have a PB for this athlete yet, or if this is a better match
+        const existingPB = resultMap.get(pb.aa_athlete_id);
+        if (!existingPB) {
+          resultMap.set(pb.aa_athlete_id, pb);
+        }
+      }
+    }
+
+    return resultMap;
+  } catch (error) {
+    console.error("Error fetching personal bests for event:", error);
+    return new Map();
+  }
 }
 
 // Helper function to get unique events from all athletes
