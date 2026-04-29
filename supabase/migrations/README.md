@@ -1,144 +1,80 @@
-# Database Migration: Athlete Events
+# Database Migrations
 
-## Overview
-This migration creates a normalized `athlete_events` table to replace the comma-separated `reliance_events` field in `wa_athlete_profiles`. This enables better querying, filtering, and management of athlete events with a `main_event` flag.
+This directory contains SQL migration files for the RF Athletics CRM database.
 
-## What This Migration Does
+## Migration Files
 
-1. **Creates `athlete_events` table** with:
-   - `id`: UUID primary key
-   - `aa_athlete_id`: Foreign key to `wa_athlete_profiles`
-   - `event_name`: The name of the event (e.g., "100m", "Long Jump")
-   - `is_main_event`: Boolean flag indicating the athlete's primary event
-   - `created_at` and `updated_at`: Timestamps
+### 20260423_create_athlete_events.sql
+- Creates `athlete_events` table to normalize athlete event data
+- Migrates data from comma-separated `reliance_events` field
+- Adds foreign key constraints and indexes
 
-2. **Migrates existing data**: Automatically parses the comma-separated `reliance_events` field and creates individual records in the new table
+### 20260424_create_athlete_events_view.sql
+- Creates database views for athlete events
 
-3. **Sets main events**: The first event in each athlete's list is marked as the main event
+### 20260424_enable_public_read_wa_tables.sql
+- Enables Row Level Security (RLS) on WA reference tables
+- Creates public read policies for `anon` and `authenticated` roles
 
-4. **Creates indexes** for optimal query performance
+### 20260424_normalize_event_names_v2.sql
+- Standardizes event naming conventions
+- Updates to latest event taxonomy (93 standardized events)
 
-## How to Run This Migration
+### 20260424_normalize_event_names.sql
+- Initial event name normalization (deprecated by v2)
 
-### Option 1: Supabase Dashboard (Recommended)
+### 20260427_create_event_benchmarks.sql
+- Creates `event_benchmarks` table for storing qualification standards and medal benchmarks
 
-1. Open your Supabase project dashboard
-2. Navigate to **SQL Editor** in the left sidebar
-3. Click **New Query**
-4. Copy the entire contents of `20260423_create_athlete_events.sql`
-5. Paste into the SQL editor
-6. Click **Run** button
-7. Verify success message
+### 20260429_add_is_senior_field.sql ⭐ NEW
+- Adds `is_senior` boolean field to `wa_athlete_profiles`
+- Filters junior athletes from dashboard display
+- Sets all athletes to senior except Rishabh Giri (junior)
 
-### Option 2: Supabase CLI
+## How to Run Migrations
 
+### Option 1: Supabase SQL Editor (Recommended)
+1. Go to your Supabase project dashboard
+2. Navigate to SQL Editor: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/sql
+3. Copy the contents of the migration file
+4. Paste and execute the SQL
+
+### Option 2: Using psql (Direct Database Access)
 ```bash
-# Make sure you're in the project root
-cd /Users/revasankhe/Library/Mobile Documents/com~apple~CloudDocs/rf-rcm
-
-# Run the migration
-npx supabase db push
-
-# Or if you have the Supabase CLI installed globally
-supabase db push
+psql postgresql://postgres:[PASSWORD]@db.uocwcewtbcdcrejwvuki.supabase.co:5432/postgres -f supabase/migrations/MIGRATION_FILE.sql
 ```
 
-### Option 3: Direct SQL Execution
-
-If you have `psql` access to your database:
-
+### Option 3: Using Migration Script (For data updates only)
+For migrations that only update data (not DDL), you can use the TypeScript scripts:
 ```bash
-psql "postgresql://[YOUR_CONNECTION_STRING]" -f supabase/migrations/20260423_create_athlete_events.sql
+npx tsx scripts/add-is-senior-field.ts
 ```
 
-## Verification Steps
+## Migration Order
 
-After running the migration, verify it worked correctly:
+Migrations should be run in chronological order based on the date prefix:
+1. 20260423_* (April 23)
+2. 20260424_* (April 24)
+3. 20260427_* (April 27)
+4. 20260429_* (April 29) ← Latest
 
-### 1. Check Table Creation
+## Rollback
+
+If you need to rollback the latest migration (is_senior field):
 ```sql
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_name = 'athlete_events';
+-- Remove is_senior column
+ALTER TABLE wa_athlete_profiles DROP COLUMN is_senior;
 ```
 
-### 2. Check Data Migration
-```sql
--- Count total events
-SELECT COUNT(*) as total_events FROM athlete_events;
+## Notes
 
--- Count athletes with main events
-SELECT COUNT(DISTINCT aa_athlete_id) as athletes_with_main_event 
-FROM athlete_events 
-WHERE is_main_event = true;
+- Always backup your database before running migrations
+- Test migrations on a development/staging environment first
+- Migrations are designed to be idempotent where possible
+- Some migrations include data updates that may take time to execute
 
--- View sample data
-SELECT * FROM athlete_events LIMIT 10;
-```
+## Related Documentation
 
-### 3. Check Main Event Assignment
-```sql
--- Should show 1 main event per athlete
-SELECT aa_athlete_id, COUNT(*) as main_event_count
-FROM athlete_events 
-WHERE is_main_event = true
-GROUP BY aa_athlete_id
-HAVING COUNT(*) > 1;
-
--- Should return 0 rows (no athlete should have multiple main events)
-```
-
-## Rollback (If Needed)
-
-If you need to rollback this migration:
-
-```sql
--- Drop the table (this will also remove all migrated data)
-DROP TABLE IF EXISTS athlete_events CASCADE;
-```
-
-**Note**: The original `reliance_events` column is preserved, so no data is lost.
-
-## Impact on Application
-
-### Frontend Changes
-- ✅ New types added: `AthleteEvent`, `PersonalBestWithEvent`
-- ✅ New queries: `fetchAthleteEvents()`, `fetchPersonalBestsForAthleteEvents()`
-- ✅ UI updated: Player Detail page now shows PBs for all athlete events
-- ✅ Main event highlighted with special styling
-
-### Backward Compatibility
-- ✅ Original `reliance_events` field preserved
-- ✅ Graceful error handling if migration not run
-- ✅ Application will work (with warnings) even if migration hasn't been applied
-
-## Future Enhancements
-
-Once this migration is stable, you can:
-1. Add more event metadata (rankings, records, etc.)
-2. Create admin UI to manage athlete events
-3. Eventually deprecate the `reliance_events` column
-4. Add support for event categories and seasons
-
-## Troubleshooting
-
-### "relation already exists" Error
-If you see this error, the table already exists. Either:
-- Skip the migration (already applied)
-- Drop the table first and re-run
-
-### "foreign key constraint" Error
-Ensure `wa_athlete_profiles` table exists with `aa_athlete_id` column before running migration.
-
-### No Data After Migration
-Check if `reliance_events` field has data:
-```sql
-SELECT COUNT(*) FROM wa_athlete_profiles WHERE reliance_events IS NOT NULL;
-```
-
-## Support
-
-For issues or questions about this migration, please check:
-- Supabase logs in the Dashboard
-- Application console for warnings
-- This README for troubleshooting steps
+- `docs/database/DATABASE_STRUCTURE.md` - Complete database schema documentation
+- `docs/database/MIGRATION_EXECUTION_FLOW.md` - Detailed migration execution guide
+- `docs/database/ATHLETE_EVENTS_VIEWS.md` - Information about database views

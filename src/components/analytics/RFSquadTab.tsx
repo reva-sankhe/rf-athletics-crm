@@ -1,10 +1,49 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fetchWAAthleteProfiles, fetchWARFAthleteResults } from "@/lib/queries";
 import type { WAAthleteProfile, WARFAthleteResult } from "@/lib/types";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, TrendingDown, Minus, Users, Trophy, Activity, Target } from "lucide-react";
+import { classifyEvent } from "@/lib/eventUtils";
+import { Users, Trophy, Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
+
+/**
+ * Parses a WA mark string into a numeric value.
+ * Time events → seconds (handles "H:MM:SS", "M:SS.ss", "SS.ss")
+ * Field events → numeric value (strips trailing units like "m")
+ * Returns null for DNS/DNF/DQ/NM/NH/ND or unparseable marks.
+ */
+function parseMark(mark: string): number | null {
+  if (!mark) return null;
+  const upper = mark.trim().toUpperCase();
+  if (['DNF', 'DNS', 'DQ', 'NM', 'NH', 'ND', 'NR', '-', ''].includes(upper)) return null;
+
+  // Strip trailing non-numeric suffixes (e.g. "m", "km")
+  const cleaned = mark.trim().replace(/[a-zA-Z]+$/, '').trim();
+
+  // H:MM:SS.ss (marathon / race walk)
+  const hms = cleaned.match(/^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/);
+  if (hms) return parseInt(hms[1]) * 3600 + parseInt(hms[2]) * 60 + parseFloat(hms[3]);
+
+  // M:SS.ss (800m, 1500m, etc.)
+  const ms = cleaned.match(/^(\d+):(\d{2}(?:\.\d+)?)$/);
+  if (ms) return parseInt(ms[1]) * 60 + parseFloat(ms[2]);
+
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * Returns the most frequently occurring non-relay discipline for an athlete,
+ * which is used as their primary event for trend analysis.
+ */
+function getPrimaryDiscipline(results: WARFAthleteResult[]): string | null {
+  const nonRelay = results.filter(r => !/relay|4x/i.test(r.discipline));
+  if (nonRelay.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const r of nonRelay) counts.set(r.discipline, (counts.get(r.discipline) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
 
 interface AthleteSummary {
   id: string;
@@ -18,14 +57,8 @@ interface AthleteSummary {
   resultsCount: number;
 }
 
-function tierColor(score: number) {
-  if (score >= 1100) return "#10b981";
-  if (score >= 1000) return "#3b82f6";
-  if (score >= 900) return "#f59e0b";
-  return "#ef4444";
-}
-
 export function RFSquadTab() {
+  const [, navigate] = useLocation();
   const [athletes, setAthletes] = useState<WAAthleteProfile[]>([]);
   const [results, setResults] = useState<WARFAthleteResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,16 +87,53 @@ export function RFSquadTab() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     if (athResults.length === 0) return [];
 
-    const recent = athResults.slice(0, 3);
-    const older = athResults.slice(3, 6);
-    const avgRecent = recent.reduce((s, r) => s + r.result_score, 0) / recent.length;
-    const avgOlder = older.length > 0
-      ? older.reduce((s, r) => s + r.result_score, 0) / older.length
-      : avgRecent;
+    // Season Best trend using actual marks (times/distances) over the last 3 years.
+    // Uses the athlete's primary discipline (most frequent non-relay event).
+    // For time events (lower = better): SB = min mark per year.
+    // For field events (higher = better): SB = max mark per year.
+    // Any improvement oldest→newest = up; any decline = down; equal or no data = stable.
+    const primaryDiscipline = getPrimaryDiscipline(athResults);
+    const { direction } = primaryDiscipline
+      ? classifyEvent(primaryDiscipline)
+      : { direction: 'lower_better' as const };
+    const isLowerBetter = direction === 'lower_better';
 
-    const trend: "up" | "down" | "stable" =
-      avgRecent - avgOlder > 15 ? "up" :
-      avgRecent - avgOlder < -15 ? "down" : "stable";
+    const disciplineResults = primaryDiscipline
+      ? athResults.filter(r => r.discipline === primaryDiscipline)
+      : athResults;
+
+    const currentYear = disciplineResults.length > 0
+      ? Math.max(...disciplineResults.map(r => r.year))
+      : new Date().getFullYear();
+
+    const getSeasonBestMark = (year: number): number | null => {
+      const parsed = disciplineResults
+        .filter(r => r.year === year)
+        .map(r => parseMark(r.mark))
+        .filter((v): v is number => v !== null);
+      if (parsed.length === 0) return null;
+      return isLowerBetter ? Math.min(...parsed) : Math.max(...parsed);
+    };
+
+    // Collect season bests for the last 3 years (oldest → newest)
+    const seasonBests = [
+      getSeasonBestMark(currentYear - 2),
+      getSeasonBestMark(currentYear - 1),
+      getSeasonBestMark(currentYear),
+    ].filter((v): v is number => v !== null);
+
+    let trend: "up" | "down" | "stable" = "stable";
+    if (seasonBests.length >= 2) {
+      const oldest = seasonBests[0];
+      const newest = seasonBests[seasonBests.length - 1];
+      if (newest !== oldest) {
+        // For lower_better (time): improving = newer mark is smaller
+        // For higher_better (field): improving = newer mark is larger
+        trend = isLowerBetter
+          ? (newest < oldest ? "up" : "down")
+          : (newest > oldest ? "up" : "down");
+      }
+    }
 
     return [{
       id: athlete.aa_athlete_id,
@@ -80,23 +150,24 @@ export function RFSquadTab() {
     }];
   });
 
-  const sorted = [...summaries].sort((a, b) => b.bestScore - a.bestScore);
   const men = summaries.filter(a => a.gender === "M");
   const women = summaries.filter(a => a.gender === "F");
-  const avgM = men.length ? Math.round(men.reduce((s, a) => s + a.bestScore, 0) / men.length) : 0;
-  const avgF = women.length ? Math.round(women.reduce((s, a) => s + a.bestScore, 0) / women.length) : 0;
   const improving = summaries.filter(a => a.trend === "up").length;
   const highPerformers = summaries.filter(a => a.bestScore >= 1000).length;
 
-  const curveData = sorted.map((a, i) => ({
-    rank: i + 1,
-    name: a.name,
-    score: a.bestScore,
-  }));
+  const menSorted = men.sort((a, b) => b.bestScore - a.bestScore);
+  const womenSorted = women.sort((a, b) => b.bestScore - a.bestScore);
+
+  const getTierColor = (score: number) => {
+    if (score >= 1100) return "bg-emerald-50 dark:bg-emerald-950/30";
+    if (score >= 1000) return "bg-blue-50 dark:bg-blue-950/30";
+    if (score >= 900) return "bg-amber-50 dark:bg-amber-950/30";
+    return "bg-red-50 dark:bg-red-950/30";
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -106,17 +177,6 @@ export function RFSquadTab() {
           <CardContent>
             <p className="text-3xl font-bold">{athletes.length}</p>
             <p className="text-xs text-muted-foreground mt-1">{men.length} Men · {women.length} Women</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Target className="h-4 w-4" /> Avg Score
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{avgM}</p>
-            <p className="text-xs text-muted-foreground mt-1">Men · Women: {avgF}</p>
           </CardContent>
         </Card>
         <Card>
@@ -145,131 +205,171 @@ export function RFSquadTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Squad Performance Curve</CardTitle>
-          <CardDescription>All RF athletes ranked by best WA score</CardDescription>
+          <div className="flex items-center gap-3">
+            <CardTitle>RF Squad Leaderboard</CardTitle>
+            <CardDescription className="mt-0">Athletes ranked by best performance score</CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="h-72 flex items-center justify-center text-muted-foreground">Loading…</div>
-          ) : curveData.length === 0 ? (
-            <div className="h-72 flex items-center justify-center text-muted-foreground">No performance data available</div>
           ) : (
             <>
-              <div className="flex flex-wrap gap-4 mb-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Elite ≥1100</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Strong ≥1000</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Developing ≥900</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" /> Emerging &lt;900</span>
+              {/* Legend */}
+              <div className="flex flex-wrap gap-4 mb-4 pb-4 border-b text-xs">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 inline-block" />
+                  <span className="text-muted-foreground">Elite ≥1100</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-blue-100 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 inline-block" />
+                  <span className="text-muted-foreground">Strong ≥1000</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-amber-100 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 inline-block" />
+                  <span className="text-muted-foreground">Developing ≥900</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-red-100 dark:bg-red-950/50 border border-red-300 dark:border-red-800 inline-block" />
+                  <span className="text-muted-foreground">Emerging &lt;900</span>
+                </span>
+                <span className="text-muted-foreground">|</span>
+                <span className="flex items-center gap-1.5">
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-muted-foreground">Season best improved over 3 yrs</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+                  <span className="text-muted-foreground">Season best declined over 3 yrs</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Minus className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">No change / insufficient data</span>
+                </span>
               </div>
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={curveData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="rank" label={{ value: "Rank", position: "insideBottom", offset: -4 }} tick={{ fontSize: 11 }} />
-                  <YAxis label={{ value: "WA Score", angle: -90, position: "insideLeft" }} tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const d = payload[0].payload;
-                      return (
-                        <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
-                          <p className="font-semibold">{d.name}</p>
-                          <p>Score: <strong>{d.score}</strong></p>
-                          <p className="text-muted-foreground">Rank #{d.rank}</p>
+
+              {/* Two Column Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:divide-x">
+                {/* Women Section */}
+                <div className="lg:pr-6">
+                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    Women
+                    <span className="text-sm text-muted-foreground font-normal">({womenSorted.length})</span>
+                  </h3>
+                  <div className="space-y-1">
+                    {womenSorted.length === 0 ? (
+                      <div className="p-8 text-center text-muted-foreground text-sm">No women athletes</div>
+                    ) : (
+                      womenSorted.map((athlete, index) => (
+                        <div key={athlete.id} className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-muted-foreground w-7 text-right flex-shrink-0">{index + 1}.</span>
+                          <div
+                            onClick={() => navigate(`/athletes/${athlete.id}`)}
+                            className={`flex-1 p-3 rounded-lg border ${getTierColor(athlete.bestScore)} hover:shadow-sm transition-shadow cursor-pointer`}
+                          >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <h4 className="font-semibold text-sm truncate">{athlete.name}</h4>
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">Age: {athlete.age ?? "—"}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                                <div className="whitespace-nowrap">
+                                  <span className="text-muted-foreground">Current:</span>
+                                  <span className="font-bold ml-1">{athlete.latestScore}</span>
+                                </div>
+                                <div className="whitespace-nowrap">
+                                  <span className="text-muted-foreground">Best:</span>
+                                  <span className="font-semibold ml-1">{athlete.bestScore}</span>
+                                </div>
+                                <div className="whitespace-nowrap">
+                                  <span className="text-muted-foreground">Trend:</span>
+                                  {athlete.trend === "up" && <TrendingUp className="h-3.5 w-3.5 text-emerald-600 inline ml-1" />}
+                                  {athlete.trend === "down" && <TrendingDown className="h-3.5 w-3.5 text-red-500 inline ml-1" />}
+                                  {athlete.trend === "stable" && <Minus className="h-3.5 w-3.5 text-muted-foreground inline ml-1" />}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {athlete.events.slice(0, 3).map(event => (
+                                <Badge key={event} variant="outline" className="text-xs py-0 px-1.5">{event}</Badge>
+                              ))}
+                              {athlete.events.length > 3 && (
+                                <Badge variant="outline" className="text-xs py-0 px-1.5">+{athlete.events.length - 3}</Badge>
+                              )}
+                              {athlete.events.length === 0 && (
+                                <span className="text-xs text-muted-foreground">No events</span>
+                              )}
+                            </div>
+                          </div>
+                          </div>
                         </div>
-                      );
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#94a3b8"
-                    strokeWidth={2}
-                    dot={(props: any) => {
-                      const { cx, cy, payload } = props;
-                      return (
-                        <circle
-                          key={`dot-${payload.rank}`}
-                          cx={cx} cy={cy} r={5}
-                          fill={tierColor(payload.score)}
-                          stroke="white" strokeWidth={1.5}
-                        />
-                      );
-                    }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Men Section */}
+                <div className="lg:pl-3">
+                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    Men
+                    <span className="text-sm text-muted-foreground font-normal">({menSorted.length})</span>
+                  </h3>
+                  <div className="space-y-1">
+                    {menSorted.length === 0 ? (
+                      <div className="p-8 text-center text-muted-foreground text-sm">No men athletes</div>
+                    ) : (
+                      menSorted.map((athlete, index) => (
+                        <div key={athlete.id} className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-muted-foreground w-7 text-right flex-shrink-0">{index + 1}.</span>
+                          <div
+                            onClick={() => navigate(`/athletes/${athlete.id}`)}
+                            className={`flex-1 p-3 rounded-lg border ${getTierColor(athlete.bestScore)} hover:shadow-sm transition-shadow cursor-pointer`}
+                          >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <h4 className="font-semibold text-sm truncate">{athlete.name}</h4>
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">Age: {athlete.age ?? "—"}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                                <div className="whitespace-nowrap">
+                                  <span className="text-muted-foreground">Current:</span>
+                                  <span className="font-bold ml-1">{athlete.latestScore}</span>
+                                </div>
+                                <div className="whitespace-nowrap">
+                                  <span className="text-muted-foreground">Best:</span>
+                                  <span className="font-semibold ml-1">{athlete.bestScore}</span>
+                                </div>
+                                <div className="whitespace-nowrap">
+                                  <span className="text-muted-foreground">Trend:</span>
+                                  {athlete.trend === "up" && <TrendingUp className="h-3.5 w-3.5 text-emerald-600 inline ml-1" />}
+                                  {athlete.trend === "down" && <TrendingDown className="h-3.5 w-3.5 text-red-500 inline ml-1" />}
+                                  {athlete.trend === "stable" && <Minus className="h-3.5 w-3.5 text-muted-foreground inline ml-1" />}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {athlete.events.slice(0, 3).map(event => (
+                                <Badge key={event} variant="outline" className="text-xs py-0 px-1.5">{event}</Badge>
+                              ))}
+                              {athlete.events.length > 3 && (
+                                <Badge variant="outline" className="text-xs py-0 px-1.5">+{athlete.events.length - 3}</Badge>
+                              )}
+                              {athlete.events.length === 0 && (
+                                <span className="text-xs text-muted-foreground">No events</span>
+                              )}
+                            </div>
+                          </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>All RF Athletes</CardTitle>
-          <CardDescription>Sorted by best performance score</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="text-left p-2">#</th>
-                  <th className="text-left p-2">Athlete</th>
-                  <th className="text-center p-2">Gender</th>
-                  <th className="text-center p-2">Age</th>
-                  <th className="text-left p-2">Events</th>
-                  <th className="text-right p-2">Best Score</th>
-                  <th className="text-right p-2">Latest</th>
-                  <th className="text-center p-2">Trend</th>
-                  <th className="text-left p-2">Tier</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((a, i) => (
-                  <tr key={a.id} className="border-b hover:bg-muted/40">
-                    <td className="p-2 text-muted-foreground">{i + 1}</td>
-                    <td className="p-2 font-medium">{a.name}</td>
-                    <td className="p-2 text-center text-muted-foreground">{a.gender}</td>
-                    <td className="p-2 text-center">{a.age ?? "—"}</td>
-                    <td className="p-2">
-                      <div className="flex flex-wrap gap-1">
-                        {a.events.slice(0, 2).map(e => (
-                          <Badge key={e} variant="outline" className="text-xs py-0">{e}</Badge>
-                        ))}
-                        {a.events.length > 2 && (
-                          <Badge variant="outline" className="text-xs py-0">+{a.events.length - 2}</Badge>
-                        )}
-                        {a.events.length === 0 && <span className="text-muted-foreground text-xs">—</span>}
-                      </div>
-                    </td>
-                    <td className="p-2 text-right font-semibold">{a.bestScore}</td>
-                    <td className="p-2 text-right text-muted-foreground">{a.latestScore}</td>
-                    <td className="p-2 text-center">
-                      {a.trend === "up" && <TrendingUp className="h-4 w-4 text-emerald-600 mx-auto" />}
-                      {a.trend === "down" && <TrendingDown className="h-4 w-4 text-red-500 mx-auto" />}
-                      {a.trend === "stable" && <Minus className="h-4 w-4 text-muted-foreground mx-auto" />}
-                    </td>
-                    <td className="p-2">
-                      {a.bestScore >= 1100 ? (
-                        <Badge className="bg-emerald-600 text-white text-xs">Elite</Badge>
-                      ) : a.bestScore >= 1000 ? (
-                        <Badge className="bg-blue-600 text-white text-xs">Strong</Badge>
-                      ) : a.bestScore >= 900 ? (
-                        <Badge variant="secondary" className="text-xs">Developing</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-xs">Emerging</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!loading && sorted.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-muted-foreground">No athlete data available</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </CardContent>
       </Card>
     </div>

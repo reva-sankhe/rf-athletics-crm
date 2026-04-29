@@ -21,6 +21,7 @@ export interface WAAthleteProfile {
   scraped_at: string | null;
   reliance_events: string | null; // comma-separated events
   age: number | null;
+  is_senior: boolean; // true = visible on dashboard, false = junior (hidden)
 }
 
 export interface WAAthleteHonour {
