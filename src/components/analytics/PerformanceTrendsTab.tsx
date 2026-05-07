@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { fetchWAAthleteProfiles, fetchWARFAthleteResults } from "@/lib/queries";
 import type { WAAthleteProfile, WARFAthleteResult } from "@/lib/types";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
@@ -160,69 +159,69 @@ export function PerformanceTrendsTab() {
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Score Over Time</CardTitle>
-          <CardDescription>Monthly average WA score — {selectedAthlete?.reliance_name}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="h-72 flex items-center justify-center text-muted-foreground">Loading…</div>
-          ) : trendData.length === 0 ? (
-            <div className="h-72 flex items-center justify-center text-muted-foreground">No results data for this athlete</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="period" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={55} />
-                <YAxis label={{ value: "Score", angle: -90, position: "insideLeft" }} tick={{ fontSize: 11 }} />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const d = payload[0].payload;
-                    return (
-                      <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
-                        <p className="font-semibold">{d.period}</p>
-                        <p>Avg Score: <strong>{d.score}</strong></p>
-                        <p className="text-muted-foreground">{d.count} result{d.count !== 1 ? "s" : ""}</p>
-                      </div>
-                    );
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="score"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: "#3b82f6", stroke: "white", strokeWidth: 1.5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      {years.length > 1 && (
+      <div className={`grid gap-4 ${years.length > 1 ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
         <Card>
-          <CardHeader>
-            <CardTitle>Year-on-Year Comparison</CardTitle>
-            <CardDescription>Monthly average score by season — {selectedAthlete?.reliance_name}</CardDescription>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Score Over Time</CardTitle>
+            <CardDescription className="text-xs">Monthly average WA score — {selectedAthlete?.reliance_name}</CardDescription>
           </CardHeader>
           <CardContent>
-            <>
-              <div className="flex flex-wrap gap-3 mb-3 text-xs text-muted-foreground">
+            {loading ? (
+              <div className="h-44 flex items-center justify-center text-muted-foreground">Loading…</div>
+            ) : trendData.length === 0 ? (
+              <div className="h-44 flex items-center justify-center text-muted-foreground">No results data for this athlete</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="period" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" height={48} />
+                  <YAxis label={{ value: "Score", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
+                          <p className="font-semibold">{d.period}</p>
+                          <p>Avg Score: <strong>{d.score}</strong></p>
+                          <p className="text-muted-foreground">{d.count} result{d.count !== 1 ? "s" : ""}</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="score"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: "#3b82f6", stroke: "white", strokeWidth: 1.5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {years.length > 1 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Year-on-Year Comparison</CardTitle>
+              <CardDescription className="text-xs">Monthly average score by season — {selectedAthlete?.reliance_name}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3 mb-2 text-xs text-muted-foreground">
                 {years.map((year, i) => (
                   <span key={year} className="flex items-center gap-1.5">
-                    <span className="w-6 border-t-2 inline-block" style={{ borderColor: YEAR_COLORS[i % YEAR_COLORS.length] }} />
+                    <span className="w-5 border-t-2 inline-block" style={{ borderColor: YEAR_COLORS[i % YEAR_COLORS.length] }} />
                     {year}
                   </span>
                 ))}
               </div>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={180}>
                 <LineChart data={yoyData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis label={{ value: "Score", angle: -90, position: "insideLeft" }} tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis label={{ value: "Score", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} tick={{ fontSize: 10 }} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
@@ -250,54 +249,11 @@ export function PerformanceTrendsTab() {
                   ))}
                 </LineChart>
               </ResponsiveContainer>
-            </>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Competition History</CardTitle>
-          <CardDescription>All results for {selectedAthlete?.reliance_name}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="text-left p-2">Date</th>
-                  <th className="text-left p-2">Competition</th>
-                  <th className="text-left p-2">Discipline</th>
-                  <th className="text-right p-2">Mark</th>
-                  <th className="text-right p-2">Score</th>
-                  <th className="text-center p-2">Place</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...athleteResults].reverse().slice(0, 50).map((r, i) => (
-                  <tr key={i} className="border-b hover:bg-muted/40">
-                    <td className="p-2 text-muted-foreground whitespace-nowrap">
-                      {new Date(r.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                    </td>
-                    <td className="p-2 max-w-[200px] truncate">{r.competition}</td>
-                    <td className="p-2">
-                      <Badge variant="outline" className="text-xs">{r.discipline}</Badge>
-                    </td>
-                    <td className="p-2 text-right font-mono">{r.mark}</td>
-                    <td className="p-2 text-right font-semibold">{r.result_score}</td>
-                    <td className="p-2 text-center text-muted-foreground">{r.place || "—"}</td>
-                  </tr>
-                ))}
-                {athleteResults.length === 0 && !loading && (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground">No results found</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

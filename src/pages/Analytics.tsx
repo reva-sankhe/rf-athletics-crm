@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RFSquadTab } from "@/components/analytics/RFSquadTab";
 import { GlobalStandingsTab } from "@/components/analytics/GlobalStandingsTab";
 import { QualificationTrackerTab } from "@/components/analytics/QualificationTrackerTab";
-import { MedalIntelligenceTab } from "@/components/analytics/MedalIntelligenceTab";
 import { ScoutingRadarTab } from "@/components/analytics/ScoutingRadarTab";
 import { PerformanceTrendsTab } from "@/components/analytics/PerformanceTrendsTab";
 import { FinalsBenchmarkTab } from "@/components/analytics/FinalsBenchmarkTab";
@@ -21,18 +20,21 @@ export default function Analytics() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="squad">RF Squad</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
           <TabsTrigger value="standings">Global Standings</TabsTrigger>
           <TabsTrigger value="qualification">Qualification</TabsTrigger>
-          <TabsTrigger value="medals">Medal Intel</TabsTrigger>
           <TabsTrigger value="scouting">Scouting</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
           <TabsTrigger value="finals">Finals Benchmark</TabsTrigger>
         </TabsList>
 
         <TabsContent value="squad" className="space-y-4">
           <RFSquadTab />
+        </TabsContent>
+
+        <TabsContent value="trends" className="space-y-4">
+          <PerformanceTrendsTab />
         </TabsContent>
 
         <TabsContent value="standings" className="space-y-4">
@@ -43,16 +45,8 @@ export default function Analytics() {
           <QualificationTrackerTab />
         </TabsContent>
 
-        <TabsContent value="medals" className="space-y-4">
-          <MedalIntelligenceTab />
-        </TabsContent>
-
         <TabsContent value="scouting" className="space-y-4">
           <ScoutingRadarTab />
-        </TabsContent>
-
-        <TabsContent value="trends" className="space-y-4">
-          <PerformanceTrendsTab />
         </TabsContent>
 
         <TabsContent value="finals" className="space-y-4">

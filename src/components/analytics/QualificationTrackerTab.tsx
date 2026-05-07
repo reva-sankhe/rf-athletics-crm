@@ -6,8 +6,19 @@ import { Label } from "@/components/ui/label";
 import { fetchWAQualificationStandards, fetchWARFAthleteResults, fetchWAAthleteProfiles } from "@/lib/queries";
 import type { WAQualificationStandard, WARFAthleteResult, WAAthleteProfile } from "@/lib/types";
 import { normalizeEventName, classifyEvent } from "@/lib/eventUtils";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Cell,
+  LabelList,
+} from "recharts";
+import { CheckCircle2, AlertCircle, BarChart2 } from "lucide-react";
 
 // All events with standards in the DB
 const QUAL_EVENTS = [
@@ -42,7 +53,8 @@ function normDisc(s: string): string {
   return normalizeEventName(s.replace(/\s*\([^)]*\)/g, ""));
 }
 
-function parseMarkValue(mark: string, event: string): number | null {
+/** Parse a mark string into a numeric value for chart / comparison */
+function parseMarkNum(mark: string, event: string): number | null {
   const cleaned = mark.replace(/\s*\([^)]*\)/g, "").trim();
   const direction = classifyEvent(event).direction;
   if (direction === "lower_better") {
@@ -56,18 +68,36 @@ function parseMarkValue(mark: string, event: string): number | null {
   }
 }
 
+/** Format a raw numeric value back to a human-readable mark for axis ticks */
+function formatAxisTick(value: number, event: string): string {
+  const direction = classifyEvent(event).direction;
+  if (direction === "lower_better") {
+    if (value >= 3600) {
+      const h = Math.floor(value / 3600);
+      const m = Math.floor((value % 3600) / 60);
+      const s = value % 60;
+      return `${h}:${String(m).padStart(2, "0")}:${s.toFixed(2).padStart(5, "0")}`;
+    }
+    if (value >= 60) {
+      const mins = Math.floor(value / 60);
+      const secs = value % 60;
+      return `${mins}:${secs.toFixed(2).padStart(5, "0")}`;
+    }
+    return value.toFixed(2);
+  }
+  return value.toFixed(2);
+}
+
 function calcGap(athleteMark: number, standardMark: number, event: string): number {
   const direction = classifyEvent(event).direction;
   if (direction === "lower_better") {
-    // Negative = athlete is faster than standard = qualified
     return (athleteMark - standardMark) / standardMark * 100;
   } else {
-    // Negative = athlete has exceeded the standard = qualified
     return (standardMark - athleteMark) / standardMark * 100;
   }
 }
 
-type Status = "both" | "qualified_ag" | "qualified_cwg" | "close" | "in_progress";
+type Status = "both" | "qualified_ag" | "qualified_cwg" | "close_ag" | "close_cwg" | "in_progress";
 
 interface QualRow {
   athleteId: string;
@@ -75,21 +105,37 @@ interface QualRow {
   gender: string;
   event: string;
   bestMark: string;
+  markNum: number;          // absolute numeric value for charting
   bestScore: number;
   agStandard: string | null;
+  agStdNum: number | null;  // parsed numeric standard
   agGap: number | null;
   cwgStandard: string | null;
+  cwgStdNum: number | null; // parsed numeric standard
   cwgGap: number | null;
   status: Status;
 }
 
 function StatusBadge({ status }: { status: Status }) {
   switch (status) {
-    case "both": return <Badge className="bg-emerald-600 text-white text-xs">AG + CWG</Badge>;
+    case "both":         return <Badge className="bg-emerald-600 text-white text-xs">AG + CWG</Badge>;
     case "qualified_ag": return <Badge className="bg-emerald-600 text-white text-xs">Qual AG</Badge>;
-    case "qualified_cwg": return <Badge className="bg-blue-600 text-white text-xs">Qual CWG</Badge>;
-    case "close": return <Badge className="bg-amber-500 text-white text-xs">Close</Badge>;
-    case "in_progress": return <Badge variant="outline" className="text-xs">In Progress</Badge>;
+    case "qualified_cwg":return <Badge className="bg-blue-600 text-white text-xs">Qual CWG</Badge>;
+    case "close_ag":     return <Badge className="bg-amber-500 text-white text-xs">Close AG</Badge>;
+    case "close_cwg":    return <Badge className="bg-orange-400 text-white text-xs">Close CWG</Badge>;
+    case "in_progress":  return <Badge variant="outline" className="text-xs">In Progress</Badge>;
+  }
+}
+
+/** Bar fill colour based on qualification status */
+function barColor(status: Status): string {
+  switch (status) {
+    case "both":
+    case "qualified_ag":  return "#10b981"; // emerald
+    case "qualified_cwg": return "#3b82f6"; // blue
+    case "close_ag":      return "#f59e0b"; // amber
+    case "close_cwg":     return "#fb923c"; // orange
+    default:              return "#9ca3af"; // muted grey
   }
 }
 
@@ -136,50 +182,108 @@ export function QualificationTrackerTab() {
       const agStd = standards.find(s => s.competition === "Asian Games" && s.event === event && s.gender === gender);
       const cwgStd = standards.find(s => s.competition === "Commonwealth Games" && s.event === event && s.gender === gender);
 
-      const athleteVal = parseMarkValue(best.mark, event);
+      const markNum = parseMarkNum(best.mark, event);
+      if (markNum === null) return [];
 
-      const agGap = agStd && athleteVal !== null
-        ? parseFloat(calcGap(athleteVal, parseFloat(agStd.standard), event).toFixed(2))
+      const agStdNum = agStd ? parseMarkNum(agStd.standard, event) : null;
+      const cwgStdNum = cwgStd ? parseMarkNum(cwgStd.standard, event) : null;
+
+      const agGap = agStdNum !== null
+        ? parseFloat(calcGap(markNum, agStdNum, event).toFixed(2))
         : null;
-      const cwgGap = cwgStd && athleteVal !== null
-        ? parseFloat(calcGap(athleteVal, parseFloat(cwgStd.standard), event).toFixed(2))
+      const cwgGap = cwgStdNum !== null
+        ? parseFloat(calcGap(markNum, cwgStdNum, event).toFixed(2))
         : null;
 
       const qualAG = agGap !== null && agGap < 0;
       const qualCWG = cwgGap !== null && cwgGap < 0;
-      const gaps = [agGap, cwgGap].filter((g): g is number => g !== null);
-      const minGap = gaps.length > 0 ? Math.min(...gaps) : null;
+      const closeAG = !qualAG && agGap !== null && agGap < 2;
+      const closeCWG = !qualCWG && cwgGap !== null && cwgGap < 2;
 
       const status: Status =
         qualAG && qualCWG ? "both" :
         qualAG ? "qualified_ag" :
         qualCWG ? "qualified_cwg" :
-        minGap !== null && minGap < 2 ? "close" : "in_progress";
+        closeAG ? "close_ag" :
+        closeCWG ? "close_cwg" :
+        "in_progress";
 
-      return [{ athleteId: athlete.aa_athlete_id, athleteName: athlete.reliance_name, gender, event, bestMark: best.mark, bestScore: best.result_score, agStandard: agStd?.standard ?? null, agGap, cwgStandard: cwgStd?.standard ?? null, cwgGap, status }];
+      return [{
+        athleteId: athlete.aa_athlete_id,
+        athleteName: athlete.reliance_name,
+        gender,
+        event,
+        bestMark: best.mark,
+        markNum,
+        bestScore: best.result_score,
+        agStandard: agStd?.standard ?? null,
+        agStdNum: agStdNum ?? null,
+        agGap,
+        cwgStandard: cwgStd?.standard ?? null,
+        cwgStdNum: cwgStdNum ?? null,
+        cwgGap,
+        status,
+      }];
     });
   });
 
+  // Cards always reflect ALL events (no filter applied)
+  const qualifiedAGSet = new Set(rows.filter(r => r.status === "qualified_ag" || r.status === "both").map(r => r.athleteId));
+  const qualifiedCWGSet = new Set(rows.filter(r => r.status === "qualified_cwg" || r.status === "both").map(r => r.athleteId));
+  // Close counts: independent — an athlete-event can be close to both
+  const closeAGCount = rows.filter(r => r.agGap !== null && r.agGap >= 0 && r.agGap < 2).length;
+  const closeCWGCount = rows.filter(r => r.cwgGap !== null && r.cwgGap >= 0 && r.cwgGap < 2).length;
+
+  // Table respects both filters
   const filtered = rows.filter(r => {
     if (filterEvent !== "all" && r.event !== filterEvent) return false;
     if (filterGender !== "all" && r.gender !== filterGender) return false;
     return true;
   });
 
-  const qualifiedAGSet = new Set(rows.filter(r => r.status === "qualified_ag" || r.status === "both").map(r => r.athleteId));
-  const qualifiedCWGSet = new Set(rows.filter(r => r.status === "qualified_cwg" || r.status === "both").map(r => r.athleteId));
-  const closeCount = rows.filter(r => r.status === "close").length;
-  const inProgressCount = rows.filter(r => r.status === "in_progress").length;
+  // Chart — only rendered when a specific event is selected
+  const direction = filterEvent !== "all" ? classifyEvent(filterEvent).direction : "lower_better";
 
-  // Chart: pick the selected event or default to 100m for the gap visual
-  const chartEvent = filterEvent !== "all" ? filterEvent : "100m";
-  const chartData = rows
-    .filter(r => r.event === chartEvent && (filterGender === "all" || r.gender === filterGender))
-    .sort((a, b) => (a.agGap ?? 99) - (b.agGap ?? 99))
-    .map(r => ({ name: r.athleteName, agGap: r.agGap, cwgGap: r.cwgGap }));
+  const chartRows = filterEvent !== "all"
+    ? rows
+        .filter(r => r.event === filterEvent && (filterGender === "all" || r.gender === filterGender))
+        .sort((a, b) =>
+          direction === "lower_better"
+            ? a.markNum - b.markNum   // fastest first (smallest value)
+            : b.markNum - a.markNum   // farthest first (largest value)
+        )
+    : [];
+
+  // Derive a single agStdNum / cwgStdNum for reference lines from the first row that has it
+  const refAgStdNum = chartRows.find(r => r.agStdNum !== null)?.agStdNum ?? null;
+  const refAgStdLabel = chartRows.find(r => r.agStandard !== null)?.agStandard ?? null;
+  const refCwgStdNum = chartRows.find(r => r.cwgStdNum !== null)?.cwgStdNum ?? null;
+  const refCwgStdLabel = chartRows.find(r => r.cwgStandard !== null)?.cwgStandard ?? null;
+
+  // X-axis domain — include the standards so reference lines always sit inside the chart
+  const allNums = [
+    ...chartRows.map(r => r.markNum),
+    ...(refAgStdNum !== null ? [refAgStdNum] : []),
+    ...(refCwgStdNum !== null ? [refCwgStdNum] : []),
+  ].filter(v => isFinite(v) && v > 0);
+
+  let xDomain: [number, number] = [0, 1];
+  if (allNums.length > 0) {
+    const minV = Math.min(...allNums);
+    const maxV = Math.max(...allNums);
+    const range = maxV - minV || 1;
+    const pad = range * 0.15;
+    xDomain = [
+      parseFloat(Math.max(0, minV - pad).toFixed(3)),
+      parseFloat((maxV + pad).toFixed(3)),
+    ];
+  }
+
+  const chartHeight = Math.max(220, chartRows.length * 40 + 48);
 
   return (
     <div className="space-y-4">
+      {/* Summary cards — always show all-events totals */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -206,134 +310,221 @@ export function QualificationTrackerTab() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-500" /> Close (&lt;2%)
+              <AlertCircle className="h-4 w-4 text-amber-500" /> Close AG
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-amber-500">{closeCount}</p>
-            <p className="text-xs text-muted-foreground mt-1">athlete-events</p>
+            <p className="text-3xl font-bold text-amber-500">{closeAGCount}</p>
+            <p className="text-xs text-muted-foreground mt-1">athlete-events · &lt;2%</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4" /> In Progress
+              <AlertCircle className="h-4 w-4 text-orange-400" /> Close CWG
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{inProgressCount}</p>
-            <p className="text-xs text-muted-foreground mt-1">athlete-events</p>
+            <p className="text-3xl font-bold text-orange-400">{closeCWGCount}</p>
+            <p className="text-xs text-muted-foreground mt-1">athlete-events · &lt;2%</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="space-y-1.5 min-w-[200px]">
-              <Label className="text-xs">Event</Label>
-              <SearchableSelect
-                value={filterEvent}
-                onValueChange={setFilterEvent}
-                options={[{ value: "all", label: "All Events" }]}
-                groups={EVENT_GROUPS.map(g => ({
-                  label: g.label,
-                  options: g.events.map(e => ({ value: e, label: e })),
-                }))}
-                searchPlaceholder="Search events…"
-              />
-            </div>
-            <div className="space-y-1.5 min-w-[140px]">
-              <Label className="text-xs">Gender</Label>
-              <SearchableSelect
-                value={filterGender}
-                onValueChange={setFilterGender}
-                options={[
-                  { value: "all", label: "All" },
-                  { value: "M", label: "Men" },
-                  { value: "F", label: "Women" },
-                ]}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+      {/* Gap to Standard chart — filters live in the header */}
       <Card>
         <CardHeader>
-          <CardTitle>Gap to Standard — {filterEvent === "all" ? "100m" : filterEvent}</CardTitle>
-          <CardDescription>
-            % gap · below 0% = qualified · green = Asian Games, dashed blue = Commonwealth
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <CardTitle>
+                Gap to Standard{filterEvent !== "all" ? ` — ${filterEvent}` : ""}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Athlete best mark vs. qualifying standard · dashed lines = AG (green) / CWG (indigo)
+              </CardDescription>
+            </div>
+
+            {/* Filters tucked into the top-right of the chart card */}
+            <div className="flex flex-wrap gap-3 shrink-0">
+              <div className="space-y-1 min-w-[180px]">
+                <Label className="text-xs">Event</Label>
+                <SearchableSelect
+                  value={filterEvent}
+                  onValueChange={setFilterEvent}
+                  options={[{ value: "all", label: "All Events" }]}
+                  groups={EVENT_GROUPS.map(g => ({
+                    label: g.label,
+                    options: g.events.map(e => ({ value: e, label: e })),
+                  }))}
+                  searchPlaceholder="Search events…"
+                />
+              </div>
+              <div className="space-y-1 min-w-[120px]">
+                <Label className="text-xs">Gender</Label>
+                <SearchableSelect
+                  value={filterGender}
+                  onValueChange={setFilterGender}
+                  options={[
+                    { value: "all", label: "All" },
+                    { value: "M", label: "Men" },
+                    { value: "F", label: "Women" },
+                  ]}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Standards legend — shown only when an event is selected and standards exist */}
+          {filterEvent !== "all" && (refAgStdNum !== null || refCwgStdNum !== null) && (
+            <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+              {refAgStdNum !== null && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-5 border-t-2 border-dashed border-emerald-500" />
+                  <span className="text-emerald-600 font-medium">AG</span>
+                  &nbsp;{refAgStdLabel}
+                </span>
+              )}
+              {refCwgStdNum !== null && (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-5 border-t-2 border-dashed border-indigo-500" />
+                  <span className="text-indigo-600 font-medium">CWG</span>
+                  &nbsp;{refCwgStdLabel}
+                </span>
+              )}
+            </div>
+          )}
         </CardHeader>
+
         <CardContent>
           {loading ? (
             <div className="h-64 flex items-center justify-center text-muted-foreground">Loading…</div>
-          ) : chartData.length === 0 ? (
+          ) : filterEvent === "all" ? (
+            /* Default blank state — no event chosen yet */
+            <div className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+              <BarChart2 className="h-10 w-10 opacity-30" />
+              <p className="text-sm font-medium">Choose an event to display the chart</p>
+            </div>
+          ) : chartRows.length === 0 ? (
             <div className="h-64 flex items-center justify-center text-muted-foreground">No data for this event</div>
           ) : (
-            <>
-              <div className="flex gap-4 mb-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Asian Games gap</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Commonwealth gap</span>
-              </div>
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={60} />
-                  <YAxis label={{ value: "Gap %", angle: -90, position: "insideLeft" }} tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const d = payload[0].payload;
-                      return (
-                        <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
-                          <p className="font-semibold">{d.name}</p>
-                          {d.agGap !== null && (
-                            <p>AG: <strong className={d.agGap < 0 ? "text-emerald-600" : "text-amber-600"}>
-                              {d.agGap > 0 ? "+" : ""}{d.agGap}%
-                            </strong></p>
-                          )}
-                          {d.cwgGap !== null && (
-                            <p>CWG: <strong className={d.cwgGap < 0 ? "text-emerald-600" : "text-amber-600"}>
-                              {d.cwgGap > 0 ? "+" : ""}{d.cwgGap}%
-                            </strong></p>
-                          )}
-                        </div>
-                      );
-                    }}
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <BarChart
+                data={chartRows}
+                layout="vertical"
+                margin={{ top: 4, right: 80, left: 8, bottom: 4 }}
+              >
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                <XAxis
+                  type="number"
+                  domain={xDomain}
+                  tickFormatter={(v) => formatAxisTick(v, filterEvent)}
+                  tick={{ fontSize: 11 }}
+                  tickCount={5}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="athleteName"
+                  width={160}
+                  tick={({ x, y, payload }) => {
+                    const name: string = payload.value;
+                    const truncated = name.length > 22 ? name.slice(0, 20) + "…" : name;
+                    return (
+                      <g transform={`translate(${x},${y})`}>
+                        <text
+                          x={-4}
+                          y={0}
+                          dy={4}
+                          textAnchor="end"
+                          fill="#111827"
+                          fontSize={12}
+                        >
+                          {truncated}
+                        </text>
+                      </g>
+                    );
+                  }}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(0,0,0,0.04)" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload as QualRow;
+                    return (
+                      <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm space-y-1">
+                        <p className="font-semibold">{d.athleteName}</p>
+                        <p>Best mark: <strong className="font-mono">{d.bestMark}</strong></p>
+                        {d.agStandard && (
+                          <p>
+                            AG std: <strong className="font-mono">{d.agStandard}</strong>
+                            {d.agGap !== null && (
+                              <span className={`ml-1.5 font-semibold ${d.agGap < 0 ? "text-emerald-600" : "text-amber-600"}`}>
+                                ({d.agGap > 0 ? "+" : ""}{d.agGap}%)
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        {d.cwgStandard && (
+                          <p>
+                            CWG std: <strong className="font-mono">{d.cwgStandard}</strong>
+                            {d.cwgGap !== null && (
+                              <span className={`ml-1.5 font-semibold ${d.cwgGap < 0 ? "text-emerald-600" : "text-amber-600"}`}>
+                                ({d.cwgGap > 0 ? "+" : ""}{d.cwgGap}%)
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        <StatusBadge status={d.status} />
+                      </div>
+                    );
+                  }}
+                />
+
+                <Bar dataKey="markNum" radius={[0, 4, 4, 0]} maxBarSize={24}>
+                  {chartRows.map((row, i) => (
+                    <Cell key={`cell-${i}`} fill={barColor(row.status)} />
+                  ))}
+                  <LabelList
+                    dataKey="bestMark"
+                    position="right"
+                    style={{ fontSize: 11, fontFamily: "monospace", fill: "#374151", fontWeight: 600 }}
                   />
-                  <ReferenceLine y={0} stroke="#10b981" strokeDasharray="4 2" label={{ value: "Standard", position: "insideTopRight", fill: "#10b981", fontSize: 10 }} />
-                  <Line
-                    type="monotone"
-                    dataKey="agGap"
+                </Bar>
+
+                {/* AG qualifying standard */}
+                {refAgStdNum !== null && isFinite(refAgStdNum) && (
+                  <ReferenceLine
+                    x={refAgStdNum}
                     stroke="#10b981"
                     strokeWidth={2}
-                    connectNulls={false}
-                    name="Asian Games %"
-                    dot={(props: any) => {
-                      const { cx, cy, payload } = props;
-                      if (payload.agGap === null || payload.agGap === undefined) return <g key={`ag-${payload.name}`} />;
-                      return <circle key={`ag-${payload.name}`} cx={cx} cy={cy} r={5} fill={payload.agGap < 0 ? "#10b981" : "#f59e0b"} stroke="white" strokeWidth={1.5} />;
+                    strokeDasharray="5 3"
+                    label={{
+                      value: `AG`,
+                      position: "insideTopLeft",
+                      fill: "#10b981",
+                      fontSize: 10,
+                      fontWeight: 700,
                     }}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="cwgGap"
-                    stroke="#3b82f6"
+                )}
+
+                {/* CWG qualifying standard */}
+                {refCwgStdNum !== null && isFinite(refCwgStdNum) && (
+                  <ReferenceLine
+                    x={refCwgStdNum}
+                    stroke="#6366f1"
                     strokeWidth={2}
                     strokeDasharray="5 3"
-                    connectNulls={false}
-                    name="Commonwealth %"
-                    dot={(props: any) => {
-                      const { cx, cy, payload } = props;
-                      if (payload.cwgGap === null || payload.cwgGap === undefined) return <g key={`cwg-${payload.name}`} />;
-                      return <circle key={`cwg-${payload.name}`} cx={cx} cy={cy} r={5} fill={payload.cwgGap < 0 ? "#3b82f6" : "#f59e0b"} stroke="white" strokeWidth={1.5} />;
+                    label={{
+                      value: `CWG`,
+                      position: "insideTopRight",
+                      fill: "#6366f1",
+                      fontSize: 10,
+                      fontWeight: 700,
                     }}
                   />
-                </LineChart>
-              </ResponsiveContainer>
-            </>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
@@ -341,7 +532,7 @@ export function QualificationTrackerTab() {
       <Card>
         <CardHeader>
           <CardTitle>All Athletes × Events</CardTitle>
-          <CardDescription>Complete qualification tracker · green rows = qualified · amber = within 2%</CardDescription>
+              <CardDescription>Complete qualification tracker · green = qualified · amber = close AG · orange = close CWG</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -363,8 +554,10 @@ export function QualificationTrackerTab() {
                   const qualified = r.status === "qualified_ag" || r.status === "qualified_cwg" || r.status === "both";
                   const rowBg = qualified
                     ? "bg-emerald-50 dark:bg-emerald-950/20"
-                    : r.status === "close"
+                    : r.status === "close_ag"
                     ? "bg-amber-50 dark:bg-amber-950/20"
+                    : r.status === "close_cwg"
+                    ? "bg-orange-50 dark:bg-orange-950/20"
                     : "";
                   return (
                     <tr key={i} className={`border-b hover:bg-muted/40 ${rowBg}`}>
