@@ -10,7 +10,6 @@ import {
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { classifyEvent } from "@/lib/eventUtils";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const YEAR_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 /** Convert a mark string to a numeric value for plotting.
@@ -130,26 +129,41 @@ export function PerformanceTrendsTab() {
     competition: r.competition,
   }));
 
-  // ── Chart 2: year-on-year – best mark per month per year ──────────────────
-  const yearMonthMap: Record<string, Record<number, number[]>> = {};
+  // ── Chart 2: year-on-year – each result plotted by calendar date (MM-DD) ──
+  // yearMap[year][mmdd] = best mark on that calendar date in that year
+  const yearMap: Record<string, Record<string, number>> = {};
   resultsWithNumeric.forEach(r => {
     const d = new Date(r.date);
     const year = d.getFullYear().toString();
-    const month = d.getMonth();
-    if (!yearMonthMap[year]) yearMonthMap[year] = {};
-    if (!yearMonthMap[year][month]) yearMonthMap[year][month] = [];
-    yearMonthMap[year][month].push(r.numericMark);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mmdd = `${mm}-${dd}`;
+    if (!yearMap[year]) yearMap[year] = {};
+    const existing = yearMap[year][mmdd];
+    yearMap[year][mmdd] =
+      existing === undefined
+        ? r.numericMark
+        : isTimeBased
+        ? Math.min(existing, r.numericMark)
+        : Math.max(existing, r.numericMark);
   });
-  const years = Object.keys(yearMonthMap).sort();
+  const years = Object.keys(yearMap).sort();
 
-  const yoyData = MONTHS.map((m, idx) => {
-    const point: Record<string, number | string> = { month: m };
+  // All unique calendar dates across all years, sorted chronologically
+  const allMMDDs = Array.from(
+    new Set(Object.values(yearMap).flatMap(m => Object.keys(m)))
+  ).sort();
+
+  // Build a data row for each calendar date
+  const yoyData = allMMDDs.map(mmdd => {
+    const [mmStr, ddStr] = mmdd.split("-");
+    const dateLabel = new Date(2000, parseInt(mmStr) - 1, parseInt(ddStr)).toLocaleDateString(
+      "en-GB",
+      { day: "2-digit", month: "short" }
+    );
+    const point: Record<string, number | string> = { mmdd, dateLabel };
     years.forEach(year => {
-      const vals = yearMonthMap[year]?.[idx];
-      if (vals && vals.length > 0) {
-        // best = fastest (min) for time events, furthest (max) for field
-        point[year] = isTimeBased ? Math.min(...vals) : Math.max(...vals);
-      }
+      if (yearMap[year]?.[mmdd] !== undefined) point[year] = yearMap[year][mmdd];
     });
     return point;
   });
@@ -273,7 +287,6 @@ export function PerformanceTrendsTab() {
             <CardTitle className="text-base">Performance Over Time</CardTitle>
             <CardDescription className="text-xs">
               {effectiveDiscipline} — {selectedAthlete?.reliance_name}
-              {isTimeBased ? " (lower = faster)" : " (higher = farther)"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -340,7 +353,7 @@ export function PerformanceTrendsTab() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Year-on-Year Comparison</CardTitle>
               <CardDescription className="text-xs">
-                Best {isTimeBased ? "time" : "mark"} per month by season — {selectedAthlete?.reliance_name}
+                Best {isTimeBased ? "time" : "mark"} per date by season — {selectedAthlete?.reliance_name}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -358,7 +371,14 @@ export function PerformanceTrendsTab() {
               <ResponsiveContainer width="100%" height={210}>
                 <LineChart data={yoyData} margin={{ top: 8, right: 12, left: 8, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <XAxis
+                    dataKey="dateLabel"
+                    tick={{ fontSize: 9 }}
+                    angle={-30}
+                    textAnchor="end"
+                    height={52}
+                    interval="preserveStartEnd"
+                  />
                   <YAxis
                     reversed={isTimeBased}
                     tickFormatter={(v) => formatNumericAsMark(v, isTimeBased)}
@@ -378,7 +398,7 @@ export function PerformanceTrendsTab() {
                       const d = payload[0].payload;
                       return (
                         <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
-                          <p className="font-semibold">{d.month}</p>
+                           <p className="font-semibold">{d.dateLabel}</p>
                           {years.map(year =>
                             d[year] !== undefined ? (
                               <p key={year}>
