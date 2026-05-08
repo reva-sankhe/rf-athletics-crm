@@ -4,6 +4,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { fetchWAToplists, fetchWAAthleteProfiles, fetchEventBenchmark } from "@/lib/queries";
 import type { WAToplist, WAAthleteProfile, EventBenchmark } from "@/lib/types";
+import { TOPLIST_DISCIPLINE_GROUPS } from "@/lib/eventGroups";
 import {
   BarChart,
   Bar,
@@ -20,28 +21,10 @@ import { Medal } from "lucide-react";
 import { classifyEvent } from "@/lib/eventUtils";
 import type { PerformanceDirection } from "@/lib/eventUtils";
 
-const EVENTS = [
-  "Men's 100m", "Men's 110m Hurdles", "Men's 200m", "Men's 400m", "Men's 400m Hurdles",
-  "Men's Decathlon", "Men's Discus Throw", "Men's Half-Marathon", "Men's Hammer Throw",
-  "Men's High Jump", "Men's Javelin Throw", "Men's Long Jump", "Men's Marathon",
-  "Men's Pole Vault", "Men's Shot Put", "Men's Triple Jump",
-  "Men's 4 x 100m Relay", "Men's 4 x 400m Relay",
-  "Women's 100m", "Women's 100m Hurdles", "Women's 200m", "Women's 400m", "Women's 400m Hurdles",
-  "Women's Discus Throw", "Women's Half-Marathon", "Women's Hammer Throw", "Women's Heptathlon",
-  "Women's High Jump", "Women's Javelin Throw", "Women's Long Jump", "Women's Marathon",
-  "Women's Pole Vault", "Women's Shot Put", "Women's Triple Jump",
-  "Women's 4 x 100m Relay", "Women's 4 x 400m Relay",
-  "4 x 100m Mixed Relay", "4 x 400m Mixed Relay",
-];
 
 const TOP3_COLOR = "#f59e0b"; // amber/yellow for top 3
 const RF_COLOR = "#00A651";   // RF green
 
-function getEventGender(event: string): string {
-  if (event.startsWith("Men's")) return "M";
-  if (event.startsWith("Women's")) return "F";
-  return "X";
-}
 
 /** Parse a mark string to a numeric value for chart comparisons */
 function parseMarkForChart(markStr: string, direction: PerformanceDirection): number {
@@ -87,18 +70,27 @@ interface BarEntry {
 export function GlobalStandingsTab() {
   const [toplists, setToplists] = useState<WAToplist[]>([]);
   const [rfAthletes, setRFAthletes] = useState<WAAthleteProfile[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState("Men's 100m");
+  const [selectedGender, setSelectedGender] = useState("M");
+  const [selectedDiscipline, setSelectedDiscipline] = useState("100m");
   const [selectedRegion, setSelectedRegion] = useState("all");
   const [sortMode, setSortMode] = useState<"score" | "mark">("score");
   const [loading, setLoading] = useState(true);
   const [benchmark, setBenchmark] = useState<EventBenchmark | null>(null);
+
+  const selectedEvent = `${selectedGender === "M" ? "Men's" : "Women's"} ${selectedDiscipline}`;
+
+  function handleGenderChange(g: string) {
+    setSelectedGender(g);
+    const allEvents = (TOPLIST_DISCIPLINE_GROUPS[g] ?? TOPLIST_DISCIPLINE_GROUPS.M).flatMap(gr => gr.events);
+    if (!allEvents.includes(selectedDiscipline)) setSelectedDiscipline(allEvents[0]);
+  }
 
   useEffect(() => { loadData(); }, [selectedEvent, selectedRegion]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const gender = getEventGender(selectedEvent);
+      const gender = selectedGender;
       // Map UI region filter to the wa_toplists region column value so that
       // the rank field in each returned row is the true WA rank for that scope.
       // "all"   → fetch Global region (WA world rankings)
@@ -306,12 +298,30 @@ export function GlobalStandingsTab() {
             {/* Title + filters */}
             <div className="flex flex-wrap items-center gap-3">
               <CardTitle className="shrink-0">Performance Standings</CardTitle>
+              <div className="flex gap-1">
+                {[{ value: "M", label: "Men's" }, { value: "F", label: "Women's" }].map(g => (
+                  <button
+                    key={g.value}
+                    onClick={() => handleGenderChange(g.value)}
+                    className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                      selectedGender === g.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-input hover:bg-muted"
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
               <SearchableSelect
-                value={selectedEvent}
-                onValueChange={setSelectedEvent}
-                options={EVENTS.map(e => ({ value: e, label: e }))}
+                value={selectedDiscipline}
+                onValueChange={setSelectedDiscipline}
+                groups={(TOPLIST_DISCIPLINE_GROUPS[selectedGender] ?? TOPLIST_DISCIPLINE_GROUPS.M).map(g => ({
+                  label: g.label,
+                  options: g.events.map(e => ({ value: e, label: e })),
+                }))}
                 searchPlaceholder="Search events…"
-                className="w-[200px]"
+                className="w-[180px]"
               />
               <SearchableSelect
                 value={selectedRegion}

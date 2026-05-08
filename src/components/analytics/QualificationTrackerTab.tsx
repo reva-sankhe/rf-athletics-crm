@@ -346,6 +346,24 @@ export function QualificationTrackerTab() {
 
             {/* Filters tucked into the top-right of the chart card */}
             <div className="flex flex-wrap gap-3 shrink-0">
+              <div className="space-y-1">
+                <Label className="text-xs">Gender</Label>
+                <div className="flex gap-1">
+                  {[{ value: "all", label: "All" }, { value: "M", label: "Men's" }, { value: "F", label: "Women's" }].map(g => (
+                    <button
+                      key={g.value}
+                      onClick={() => setFilterGender(g.value)}
+                      className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                        filterGender === g.value
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-input hover:bg-muted"
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="space-y-1 min-w-[180px]">
                 <Label className="text-xs">Event</Label>
                 <SearchableSelect
@@ -357,18 +375,6 @@ export function QualificationTrackerTab() {
                     options: g.events.map(e => ({ value: e, label: e })),
                   }))}
                   searchPlaceholder="Search events…"
-                />
-              </div>
-              <div className="space-y-1 min-w-[120px]">
-                <Label className="text-xs">Gender</Label>
-                <SearchableSelect
-                  value={filterGender}
-                  onValueChange={setFilterGender}
-                  options={[
-                    { value: "all", label: "All" },
-                    { value: "M", label: "Men" },
-                    { value: "F", label: "Women" },
-                  ]}
                 />
               </div>
             </div>
