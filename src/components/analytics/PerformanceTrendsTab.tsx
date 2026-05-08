@@ -43,9 +43,10 @@ export function PerformanceTrendsTab() {
     .filter(r => r.aa_athlete_id === selectedId && !r.not_legal)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Monthly score trend (chronological)
+  // Monthly score trend (chronological) — exclude 0 scores (DNS/DNF)
   const monthlyMap: Record<string, number[]> = {};
   athleteResults.forEach(r => {
+    if (!r.result_score) return;
     const d = new Date(r.date);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!monthlyMap[key]) monthlyMap[key] = [];
@@ -62,6 +63,7 @@ export function PerformanceTrendsTab() {
   // Year-on-year comparison
   const yearMonthMap: Record<string, Record<number, number[]>> = {};
   athleteResults.forEach(r => {
+    if (!r.result_score) return;
     const d = new Date(r.date);
     const year = d.getFullYear().toString();
     const month = d.getMonth();
@@ -284,7 +286,11 @@ export function PerformanceTrendsTab() {
                       <Badge variant="outline" className="text-xs">{r.discipline}</Badge>
                     </td>
                     <td className="p-2 text-right font-mono">{r.mark}</td>
-                    <td className="p-2 text-right font-semibold">{r.result_score}</td>
+                    <td className="p-2 text-right font-semibold">
+                      {r.result_score
+                        ? r.result_score
+                        : <span className="text-muted-foreground font-normal">—</span>}
+                    </td>
                     <td className="p-2 text-center text-muted-foreground">{r.place || "—"}</td>
                   </tr>
                 ))}

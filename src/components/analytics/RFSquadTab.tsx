@@ -54,16 +54,20 @@ export function RFSquadTab() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     if (athResults.length === 0) return [];
 
-    const recent = athResults.slice(0, 3);
-    const older = athResults.slice(3, 6);
-    const avgRecent = recent.reduce((s, r) => s + r.result_score, 0) / recent.length;
-    const avgOlder = older.length > 0
-      ? older.reduce((s, r) => s + r.result_score, 0) / older.length
-      : avgRecent;
+    const pbByYear: Record<number, number> = {};
+    for (const r of athResults) {
+      const year = new Date(r.date).getFullYear();
+      if (pbByYear[year] === undefined || r.result_score > pbByYear[year]) {
+        pbByYear[year] = r.result_score;
+      }
+    }
+    const years = Object.keys(pbByYear).map(Number).sort((a, b) => b - a);
+    const currentPB = years.length > 0 ? pbByYear[years[0]] : 0;
+    const prevPB = years.length > 1 ? pbByYear[years[1]] : currentPB;
 
     const trend: "up" | "down" | "stable" =
-      avgRecent - avgOlder > 15 ? "up" :
-      avgRecent - avgOlder < -15 ? "down" : "stable";
+      currentPB > prevPB ? "up" :
+      currentPB < prevPB ? "down" : "stable";
 
     return [{
       id: athlete.aa_athlete_id,
