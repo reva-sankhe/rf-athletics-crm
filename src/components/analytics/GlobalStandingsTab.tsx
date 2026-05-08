@@ -1,13 +1,24 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { fetchWAToplists, fetchWAAthleteProfiles } from "@/lib/queries";
-import type { WAToplist, WAAthleteProfile } from "@/lib/types";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Medal, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { fetchWAToplists, fetchWAAthleteProfiles, fetchEventBenchmark } from "@/lib/queries";
+import type { WAToplist, WAAthleteProfile, EventBenchmark } from "@/lib/types";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  LabelList,
+  ReferenceLine,
+} from "recharts";
+import { Medal } from "lucide-react";
 import { classifyEvent } from "@/lib/eventUtils";
+import type { PerformanceDirection } from "@/lib/eventUtils";
 
 const EVENTS = [
   "Men's 100m", "Men's 110m Hurdles", "Men's 200m", "Men's 400m", "Men's 400m Hurdles",
@@ -23,10 +34,54 @@ const EVENTS = [
   "4 x 100m Mixed Relay", "4 x 400m Mixed Relay",
 ];
 
+const TOP3_COLOR = "#f59e0b"; // amber/yellow for top 3
+const RF_COLOR = "#00A651";   // RF green
+
 function getEventGender(event: string): string {
   if (event.startsWith("Men's")) return "M";
   if (event.startsWith("Women's")) return "F";
   return "X";
+}
+
+/** Parse a mark string to a numeric value for chart comparisons */
+function parseMarkForChart(markStr: string, direction: PerformanceDirection): number {
+  const cleaned = markStr.replace(/\s*\([^)]*\)/g, "").trim();
+  if (direction === "lower_better") {
+    const t = cleaned.replace(/[^0-9:.]/g, "");
+    if (!t) return Infinity;
+    const parts = t.split(/[:.]/).map(Number);
+    if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 100;
+    if (parts.length === 2) return parts[0] + parts[1] / 100;
+    return parseFloat(t) || Infinity;
+  }
+  return parseFloat(cleaned.replace(/[^0-9.]/g, "")) || 0;
+}
+
+/** Format a numeric seconds/meters value back to a human-readable mark */
+function formatAxisTick(value: number, direction: PerformanceDirection): string {
+  if (direction === "lower_better") {
+    if (value >= 60) {
+      const mins = Math.floor(value / 60);
+      const secs = value % 60;
+      return `${mins}:${secs.toFixed(2).padStart(5, "0")}`;
+    }
+    return value.toFixed(2);
+  }
+  return value.toFixed(2);
+}
+
+type BarSection = "top" | "rf";
+
+interface BarEntry {
+  name: string;
+  markNum: number;
+  mark: string;
+  nationality: string;
+  score: string;
+  isRF: boolean;
+  section: BarSection;
+  rank: number;         // global rank in the filtered list
+  medalIndex?: number;  // 0/1/2 for top 3
 }
 
 export function GlobalStandingsTab() {
@@ -36,19 +91,32 @@ export function GlobalStandingsTab() {
   const [selectedRegion, setSelectedRegion] = useState("all");
   const [sortMode, setSortMode] = useState<"score" | "mark">("score");
   const [loading, setLoading] = useState(true);
+  const [benchmark, setBenchmark] = useState<EventBenchmark | null>(null);
 
-  useEffect(() => { loadData(); }, [selectedEvent]);
+  useEffect(() => { loadData(); }, [selectedEvent, selectedRegion]);
 
   async function loadData() {
     setLoading(true);
     try {
       const gender = getEventGender(selectedEvent);
-      const [toplistData, rfData] = await Promise.all([
-        fetchWAToplists(selectedEvent, gender, 50),
+      // Map UI region filter to the wa_toplists region column value so that
+      // the rank field in each returned row is the true WA rank for that scope.
+      // "all"   → fetch Global region (WA world rankings)
+      // "asia"  → fetch Asia region   (WA Asian rankings)
+      // "india" → fetch India region  (WA India-specific rankings)
+      const fetchRegion =
+        selectedRegion === "asia"  ? "Asia"   :
+        selectedRegion === "india" ? "India"  :
+        "Global";
+
+      const [toplistData, rfData, benchmarkData] = await Promise.all([
+        fetchWAToplists(selectedEvent, gender, 2000, fetchRegion),
         fetchWAAthleteProfiles(),
+        fetchEventBenchmark(selectedEvent),
       ]);
       setToplists(toplistData);
       setRFAthletes(rfData);
+      setBenchmark(benchmarkData);
     } catch (e) {
       console.error(e);
     } finally {
@@ -61,73 +129,190 @@ export function GlobalStandingsTab() {
 
   const eventDirection = classifyEvent(selectedEvent).direction;
 
-  function parseMarkNum(markStr: string): number {
-    const cleaned = markStr.replace(/\s*\([^)]*\)/g, "").trim();
-    if (eventDirection === "lower_better") {
-      const t = cleaned.replace(/[^0-9:.]/g, "");
-      if (!t) return Infinity;
-      const parts = t.split(/[:.]/).map(Number);
-      if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 100;
-      if (parts.length === 2) return parts[0] + parts[1] / 100;
-      return parseFloat(t) || Infinity;
+  // Data is already scoped to the correct region by the DB query in loadData.
+  // Deduplicate: keep only the best performance per athlete (across years).
+  const deduplicatedMap = new Map<string, WAToplist>();
+  for (const entry of toplists) {
+    const key = entry.athlete_name.toLowerCase();
+    const existing = deduplicatedMap.get(key);
+    if (!existing) {
+      deduplicatedMap.set(key, entry);
+    } else {
+      const existingVal = parseMarkForChart(existing.mark, eventDirection);
+      const newVal = parseMarkForChart(entry.mark, eventDirection);
+      const isBetter = eventDirection === "lower_better" ? newVal < existingVal : newVal > existingVal;
+      if (isBetter) deduplicatedMap.set(key, entry);
     }
-    return parseFloat(cleaned.replace(/[^0-9.]/g, "")) || -Infinity;
   }
+  const deduplicated = Array.from(deduplicatedMap.values());
 
-  const regionFiltered = toplists.filter(t => {
-    if (selectedRegion === "asia") return t.region === "Asia";
-    if (selectedRegion === "india") return t.nationality === "IND";
-    return true;
+  // Sorted by mark (best performance first) for top-3 chart
+  const sortedByMark = [...deduplicated].sort((a, b) => {
+    const aVal = parseMarkForChart(a.mark, eventDirection);
+    const bVal = parseMarkForChart(b.mark, eventDirection);
+    return eventDirection === "lower_better" ? aVal - bVal : bVal - aVal;
   });
 
-  const filtered = [...regionFiltered].sort((a, b) => {
+  // Ranks to show in the chart (1-based)
+  const TOP_RANKS = [1, 2, 3, 5, 10];
+  const topEntries = TOP_RANKS
+    .map(r => sortedByMark[r - 1])
+    .filter(Boolean);
+  const topNames = new Set(topEntries.map(a => a.athlete_name));
+
+  // RF athletes not already in topEntries, sorted by best mark
+  const rfNotInTop = deduplicated
+    .filter((a: WAToplist) => isRF(a.athlete_name) && !topNames.has(a.athlete_name))
+    .sort((a: WAToplist, b: WAToplist) => {
+      const aVal = parseMarkForChart(a.mark, eventDirection);
+      const bVal = parseMarkForChart(b.mark, eventDirection);
+      return eventDirection === "lower_better" ? aVal - bVal : bVal - aVal;
+    });
+
+  // Build combined bar chart data
+  const barChartData: BarEntry[] = [
+    ...topEntries.map((item, i) => ({
+      name: item.athlete_name,
+      markNum: parseMarkForChart(item.mark, eventDirection),
+      mark: item.mark,
+      nationality: item.nationality,
+      score: item.score,
+      isRF: isRF(item.athlete_name),
+      section: "top" as BarSection,
+      rank: TOP_RANKS[i],
+    })),
+    ...rfNotInTop.map((item) => ({
+      name: item.athlete_name,
+      markNum: parseMarkForChart(item.mark, eventDirection),
+      mark: item.mark,
+      nationality: item.nationality,
+      score: item.score,
+      isRF: true,
+      section: "rf" as BarSection,
+      // Use the actual WA rank stored in the database for the fetched region
+      // (Global rank when "All Regions" is selected, Asia rank for "Asia", etc.)
+      // This replaces the previous bug where a locally-computed sort position was
+      // used, which could accidentally show a rank number that matched a different
+      // event's ranking (e.g., showing #37 for 100m when the athlete is #37 in 200m).
+      rank: item.rank,
+    })),
+  ];
+
+  // Parse qualifying standards to numeric
+  const agStdNum = benchmark?.asian_games_qual_standard
+    ? parseMarkForChart(benchmark.asian_games_qual_standard, eventDirection)
+    : null;
+  const cwgStdNum = benchmark?.commonwealth_games_qual_standard
+    ? parseMarkForChart(benchmark.commonwealth_games_qual_standard, eventDirection)
+    : null;
+
+  // Compute X-axis domain including the qualifying standards
+  const validNums = barChartData
+    .map(d => d.markNum)
+    .filter(v => isFinite(v) && v > 0);
+  const allDomainNums = [
+    ...validNums,
+    ...(agStdNum !== null && isFinite(agStdNum) && agStdNum > 0 ? [agStdNum] : []),
+    ...(cwgStdNum !== null && isFinite(cwgStdNum) && cwgStdNum > 0 ? [cwgStdNum] : []),
+  ];
+
+  let xDomain: [number, number] = [0, 1];
+  if (allDomainNums.length > 0) {
+    const minV = Math.min(...allDomainNums);
+    const maxV = Math.max(...allDomainNums);
+    const range = maxV - minV || 1;
+    const pad = range * 0.2;
+    xDomain = [
+      Math.max(0, parseFloat((minV - pad).toFixed(2))),
+      parseFloat((maxV + pad).toFixed(2)),
+    ];
+  }
+
+  const chartHeight = Math.max(200, barChartData.length * 46 + 60);
+
+  // Summary stats — use the full mark-sorted list so RF athletes ranked outside top-25 are not missed
+  const rfInAll = sortedByMark.filter(d => isRF(d.athlete_name));
+  const bestRF = rfInAll.length > 0 ? rfInAll[0] : null;
+  // Use the WA rank from the database (same value shown in the bar chart) for consistency
+  const bestRFRank = bestRF?.rank ?? null;
+  const leader = sortedByMark[0];
+  const rfScoreGap = bestRF && leader
+    ? (parseInt(leader.score) || 0) - (parseInt(bestRF.score) || 0)
+    : null;
+
+  // Full rankings table (sorted by selected mode)
+  const filtered = [...deduplicated].sort((a, b) => {
     if (sortMode === "mark") {
-      const aVal = parseMarkNum(a.mark);
-      const bVal = parseMarkNum(b.mark);
+      const aVal = parseMarkForChart(a.mark, eventDirection);
+      const bVal = parseMarkForChart(b.mark, eventDirection);
       return eventDirection === "lower_better" ? aVal - bVal : bVal - aVal;
     }
-    // Default: sort by WA score descending
     return (parseInt(b.score) || 0) - (parseInt(a.score) || 0);
   });
 
-  // Chart always uses score order (top 25 by score)
-  const top25 = [...regionFiltered]
-    .sort((a, b) => (parseInt(b.score) || 0) - (parseInt(a.score) || 0))
-    .slice(0, 25);
-
-  const chartData = top25.map((item, i) => ({
-    position: i + 1,
-    name: item.athlete_name,
-    score: parseInt(item.score) || 0,
-    mark: item.mark,
-    nationality: item.nationality,
-    isRF: isRF(item.athlete_name),
-    region: item.region,
-  }));
-
-  const rfPositions = chartData.filter(d => d.isRF);
-  const bestRF = rfPositions.length > 0
-    ? rfPositions.reduce((b, d) => d.position < b.position ? d : b)
-    : null;
-  const leader = chartData[0];
-  const rfScoreGap = bestRF && leader ? leader.score - bestRF.score : null;
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+
+      {/* Summary cards — compact single-row strip */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="py-0">
+          <CardContent className="flex items-center gap-3 px-4 py-3">
+            <Medal className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground leading-none mb-0.5">Best RF Position</p>
+              {bestRF ? (
+                <p className="text-lg font-bold text-blue-600 leading-none">
+                  #{bestRFRank}
+                  <span className="text-xs font-normal text-muted-foreground ml-1.5 truncate">{bestRF.athlete_name} · {bestRF.mark}</span>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">No RF athletes ranked</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="py-0">
+          <CardContent className="flex items-center gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground leading-none mb-0.5">RF Athletes Ranked</p>
+              <p className="text-lg font-bold leading-none">
+                {rfInAll.length}
+                <span className="text-xs font-normal text-muted-foreground ml-1.5">of {sortedByMark.length}</span>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="py-0">
+          <CardContent className="flex items-center gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground leading-none mb-0.5">Score Gap to Leader</p>
+              {rfScoreGap !== null ? (
+                <p className="text-lg font-bold text-amber-500 leading-none">
+                  {rfScoreGap}
+                  <span className="text-xs font-normal text-muted-foreground ml-1.5">pts behind #1</span>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">—</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Horizontal Bar Chart ── */}
       <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="space-y-1.5 min-w-[180px]">
-              <Label className="text-xs">Event</Label>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Title + filters */}
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle className="shrink-0">Performance Standings</CardTitle>
               <SearchableSelect
                 value={selectedEvent}
                 onValueChange={setSelectedEvent}
                 options={EVENTS.map(e => ({ value: e, label: e }))}
                 searchPlaceholder="Search events…"
+                className="w-[200px]"
               />
-            </div>
-            <div className="space-y-1.5 min-w-[150px]">
-              <Label className="text-xs">Region</Label>
               <SearchableSelect
                 value={selectedRegion}
                 onValueChange={setSelectedRegion}
@@ -136,197 +321,158 @@ export function GlobalStandingsTab() {
                   { value: "asia", label: "Asia" },
                   { value: "india", label: "India Only" },
                 ]}
+                className="w-[140px]"
               />
             </div>
+            {/* Qualifying standards legend */}
+            {(agStdNum !== null || cwgStdNum !== null) && (
+              <div className="flex flex-col gap-1 text-xs text-muted-foreground text-right shrink-0">
+                {agStdNum !== null && isFinite(agStdNum) && (
+                  <span className="flex items-center justify-end gap-1.5">
+                    <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: "#10b981" }} />
+                    <span style={{ color: "#10b981" }} className="font-medium">AG</span>
+                    &nbsp;{benchmark?.asian_games_qual_standard}
+                  </span>
+                )}
+                {cwgStdNum !== null && isFinite(cwgStdNum) && (
+                  <span className="flex items-center justify-end gap-1.5">
+                    <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: "#6366f1" }} />
+                    <span style={{ color: "#6366f1" }} className="font-medium">CWG</span>
+                    &nbsp;{benchmark?.commonwealth_games_qual_standard}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Medal className="h-4 w-4" /> Best RF Position
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {bestRF ? (
-              <>
-                <p className="text-3xl font-bold text-blue-600">#{bestRF.position}</p>
-                <p className="text-sm text-muted-foreground mt-1 truncate">{bestRF.name}</p>
-                <p className="text-xs text-muted-foreground">Mark: {bestRF.mark}</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground mt-2">No RF athletes in top 25</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">RF Athletes in View</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{rfPositions.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">out of {top25.length} athletes shown</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Score Gap to Leader</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {rfScoreGap !== null ? (
-              <>
-                <p className="text-3xl font-bold text-amber-500">{rfScoreGap}</p>
-                <p className="text-xs text-muted-foreground mt-1">points behind #1</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground mt-2">—</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Score Standings — {selectedEvent}</CardTitle>
-          <CardDescription>Top 25 by WA score · RF athletes shown as larger blue dots</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="h-72 flex items-center justify-center text-muted-foreground">Loading…</div>
-          ) : chartData.length === 0 ? (
-            <div className="h-72 flex items-center justify-center text-muted-foreground">No data for selected filters</div>
+            <div className="h-56 flex items-center justify-center text-muted-foreground">Loading…</div>
+          ) : barChartData.length === 0 ? (
+            <div className="h-56 flex items-center justify-center text-muted-foreground">
+              No data for selected filters
+            </div>
           ) : (
             <>
-              <div className="flex gap-4 mb-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" /> Other athletes</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-500 inline-block" /> RF athletes</span>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+
+              <ResponsiveContainer width="100%" height={barChartData.length * 36 + 32}>
+                <BarChart
+                  data={barChartData}
+                  layout="vertical"
+                  margin={{ top: 2, right: 90, left: 8, bottom: 4 }}
+                >
+                  <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                   <XAxis
-                    dataKey="position"
-                    label={{ value: "Position", position: "insideBottom", offset: -4 }}
+                    type="number"
+                    domain={xDomain}
+                    tickFormatter={(v) => formatAxisTick(v, eventDirection)}
                     tick={{ fontSize: 11 }}
+                    tickCount={5}
                   />
                   <YAxis
-                    label={{ value: "WA Score", angle: -90, position: "insideLeft" }}
-                    tick={{ fontSize: 11 }}
+                    type="category"
+                    dataKey="name"
+                    width={180}
+                    tick={({ x, y, payload, index }) => {
+                      const entry = barChartData[index];
+                      const rawName: string = payload.value;
+                      const truncated = rawName.length > 20 ? rawName.slice(0, 18) + "…" : rawName;
+                      const rankPrefix = entry?.section === "top" ? `#${entry.rank} ` : "";
+                      const rankSuffix = entry?.section === "rf" && entry?.rank ? ` (#${entry.rank})` : "";
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <text
+                            x={-4}
+                            y={0}
+                            dy={4}
+                            textAnchor="end"
+                            fill={entry?.isRF ? RF_COLOR : "#111827"}
+                            fontSize={12}
+                            fontWeight={entry?.isRF ? 600 : 400}
+                          >
+                            {rankPrefix}{truncated}{rankSuffix}
+                          </text>
+                        </g>
+                      );
+                    }}
                   />
                   <Tooltip
+                    cursor={{ fill: "rgba(0,0,0,0.04)" }}
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
-                      const d = payload[0].payload;
+                      const d = payload[0].payload as BarEntry;
                       return (
                         <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
                           <p className="font-semibold">{d.name}</p>
-                          <p className="text-muted-foreground text-xs">{d.nationality} · {d.region}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {d.nationality}{d.section === "rf" ? ` · Global rank #${d.rank}` : ""}
+                          </p>
                           <p>Mark: <strong className="font-mono">{d.mark}</strong></p>
-                          <p>Score: <strong>{d.score}</strong></p>
-                          {d.isRF && <Badge className="mt-1 text-xs">RF Athlete</Badge>}
+                          {d.score && <p>WA Score: <strong>{d.score}</strong></p>}
+                          {d.isRF && (
+                            <Badge className="mt-1 text-xs" style={{ background: RF_COLOR, color: "white" }}>
+                              RF Athlete
+                            </Badge>
+                          )}
                         </div>
                       );
                     }}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#94a3b8"
-                    strokeWidth={2}
-                    dot={(props: any) => {
-                      const { cx, cy, payload } = props;
-                      return (
-                        <circle
-                          key={`dot-${payload.position}`}
-                          cx={cx} cy={cy}
-                          r={payload.isRF ? 7 : 4}
-                          fill={payload.isRF ? "#3b82f6" : "#94a3b8"}
-                          stroke="white" strokeWidth={1.5}
-                        />
-                      );
-                    }}
-                  />
-                </LineChart>
+                  <Bar dataKey="markNum" radius={[0, 4, 4, 0]} maxBarSize={24}>
+                    {barChartData.map((entry, index) => (
+                      <Cell
+                        key={`bar-${index}`}
+                        fill={entry.isRF ? RF_COLOR : TOP3_COLOR}
+                      />
+                    ))}
+                    <LabelList
+                      dataKey="mark"
+                      position="right"
+                      style={{ fontSize: 12, fontFamily: "monospace", fill: "#374151", fontWeight: 600 }}
+                    />
+                  </Bar>
+
+                  {/* Asian Games qualifying standard */}
+                  {agStdNum !== null && isFinite(agStdNum) && (
+                    <ReferenceLine
+                      x={agStdNum}
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      strokeDasharray="5 3"
+                      label={{
+                        value: `AG (${benchmark?.asian_games_qual_standard})`,
+                        position: "insideTopLeft",
+                        fill: "#10b981",
+                        fontSize: 10,
+                        fontWeight: 600,
+                      }}
+                    />
+                  )}
+
+                  {/* Commonwealth Games qualifying standard */}
+                  {cwgStdNum !== null && isFinite(cwgStdNum) && (
+                    <ReferenceLine
+                      x={cwgStdNum}
+                      stroke="#6366f1"
+                      strokeWidth={2}
+                      strokeDasharray="5 3"
+                      label={{
+                        value: `CWG (${benchmark?.commonwealth_games_qual_standard})`,
+                        position: "insideTopRight",
+                        fill: "#6366f1",
+                        fontSize: 10,
+                        fontWeight: 600,
+                      }}
+                    />
+                  )}
+                </BarChart>
               </ResponsiveContainer>
+
             </>
           )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Full Rankings</CardTitle>
-          <CardDescription>RF athletes highlighted · click Mark or Score header to sort</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="text-left p-2">Pos</th>
-                  <th className="text-left p-2">Athlete</th>
-                  <th className="text-left p-2">Country</th>
-                  <th className="text-right p-2">
-                    <button
-                      onClick={() => setSortMode("mark")}
-                      className={`flex items-center gap-1 ml-auto transition-colors hover:text-foreground ${sortMode === "mark" ? "text-foreground font-semibold" : ""}`}
-                    >
-                      Mark
-                      {sortMode === "mark"
-                        ? (eventDirection === "lower_better"
-                          ? <ArrowUp size={11} />
-                          : <ArrowDown size={11} />)
-                        : <ArrowUpDown size={11} className="opacity-40" />}
-                    </button>
-                  </th>
-                  <th className="text-right p-2">
-                    <button
-                      onClick={() => setSortMode("score")}
-                      className={`flex items-center gap-1 ml-auto transition-colors hover:text-foreground ${sortMode === "score" ? "text-foreground font-semibold" : ""}`}
-                    >
-                      Score
-                      {sortMode === "score"
-                        ? <ArrowDown size={11} />
-                        : <ArrowUpDown size={11} className="opacity-40" />}
-                    </button>
-                  </th>
-                  <th className="text-left p-2">Region</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.slice(0, 50).map((item, i) => {
-                  const rfFlag = isRF(item.athlete_name);
-                  return (
-                    <tr
-                      key={item.id}
-                      className={`border-b ${rfFlag ? "bg-blue-50 dark:bg-blue-950/20" : "hover:bg-muted/40"}`}
-                    >
-                      <td className="p-2 text-muted-foreground">{i + 1}</td>
-                      <td className="p-2 font-medium">
-                        {item.athlete_name}
-                        {rfFlag && <Badge variant="secondary" className="ml-2 text-xs">RF</Badge>}
-                      </td>
-                      <td className="p-2 text-muted-foreground">{item.nationality}</td>
-                      <td className={`p-2 text-right font-mono ${sortMode === "mark" ? "font-semibold" : ""}`}>{item.mark}</td>
-                      <td className={`p-2 text-right ${sortMode === "score" ? "font-semibold" : ""}`}>{item.score}</td>
-                      <td className="p-2">
-                        <Badge variant="outline" className="text-xs">{item.region}</Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-muted-foreground">No data for selected filters</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

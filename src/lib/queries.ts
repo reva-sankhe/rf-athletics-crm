@@ -50,11 +50,18 @@ export async function updateAthlete(id: string, updates: Partial<Athlete>): Prom
 }
 
 // WA Athlete Profiles
-export async function fetchWAAthleteProfiles(): Promise<WAAthleteProfile[]> {
-  const { data, error } = await supabase
+export async function fetchWAAthleteProfiles(includeJuniors = false): Promise<WAAthleteProfile[]> {
+  let query = supabase
     .from("wa_athlete_profiles")
     .select("*")
     .order("reliance_name");
+  
+  // Filter to only senior athletes by default (excludes juniors from dashboard)
+  if (!includeJuniors) {
+    query = query.eq("is_senior", true);
+  }
+  
+  const { data, error } = await query;
   if (error) throw error;
   return data as WAAthleteProfile[];
 }
@@ -267,7 +274,7 @@ export async function fetchWARFAthleteResults(athleteId?: string, limit = 100): 
 }
 
 // WA Toplists
-export async function fetchWAToplists(event?: string, gender?: string, limit = 100): Promise<WAToplist[]> {
+export async function fetchWAToplists(event?: string, gender?: string, limit = 100, region?: string): Promise<WAToplist[]> {
   let query = supabase
     .from("wa_toplists")
     .select("*")
@@ -279,6 +286,9 @@ export async function fetchWAToplists(event?: string, gender?: string, limit = 1
   }
   if (gender) {
     query = query.eq("gender", gender);
+  }
+  if (region) {
+    query = query.eq("region", region);
   }
   
   const { data, error } = await query;

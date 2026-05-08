@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents, fetchAthleteRankings } from "@/lib/queries";
+import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents, fetchAthleteRankings, fetchWARFAthleteResults } from "@/lib/queries";
 import { Skeleton } from "@/components/Skeleton";
-import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking } from "@/lib/types";
+import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking, WARFAthleteResult } from "@/lib/types";
 import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -16,6 +16,7 @@ export default function AthleteDetail() {
   const [athleteEvents, setAthleteEvents] = useState<AthleteEvent[]>([]);
   const [matchedPersonalBests, setMatchedPersonalBests] = useState<PersonalBestWithEvent[]>([]);
   const [rankings, setRankings] = useState<WARanking[]>([]);
+  const [competitionResults, setCompetitionResults] = useState<WARFAthleteResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEventFilters, setSelectedEventFilters] = useState<Set<string>>(new Set());
 
@@ -70,6 +71,15 @@ export default function AthleteDetail() {
       } catch (honoursError) {
         console.warn("Could not fetch athlete honours:", honoursError);
         setHonours([]);
+      }
+
+      // Try to fetch WA competition results
+      try {
+        const results = await fetchWARFAthleteResults(id!, 200);
+        setCompetitionResults(results.filter(r => !r.not_legal).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      } catch (resultsError) {
+        console.warn("Could not fetch competition results:", resultsError);
+        setCompetitionResults([]);
       }
     } catch (error) {
       console.error("Error loading athlete:", error);
@@ -613,6 +623,51 @@ export default function AthleteDetail() {
           </div>
         ) : (
           <p className="text-muted-foreground">No performance honours recorded</p>
+        )}
+      </div>
+
+      {/* Competition History */}
+      <div className="bg-card border border-border rounded-2xl p-6">
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-1.5">
+          <TrendingUp size={12} />
+          Competition History
+        </div>
+
+        {competitionResults.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="text-left py-3 px-2">Date</th>
+                  <th className="text-left py-3 px-2">Competition</th>
+                  <th className="text-left py-3 px-2">Discipline</th>
+                  <th className="text-right py-3 px-2">Mark</th>
+                  <th className="text-right py-3 px-2">Score</th>
+                  <th className="text-center py-3 px-2">Place</th>
+                </tr>
+              </thead>
+              <tbody>
+                {competitionResults.slice(0, 50).map((r, i) => (
+                  <tr key={i} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                    <td className="py-3 px-2 text-muted-foreground whitespace-nowrap">
+                      {new Date(r.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                    </td>
+                    <td className="py-3 px-2 max-w-[200px] truncate text-foreground">{r.competition}</td>
+                    <td className="py-3 px-2">
+                      <span className="px-2 py-0.5 rounded border border-border text-xs text-muted-foreground">
+                        {r.discipline}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono text-foreground">{r.mark}</td>
+                    <td className="py-3 px-2 text-right font-semibold text-foreground">{r.result_score}</td>
+                    <td className="py-3 px-2 text-center text-muted-foreground">{r.place || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-muted-foreground">No competition results recorded</p>
         )}
       </div>
 
