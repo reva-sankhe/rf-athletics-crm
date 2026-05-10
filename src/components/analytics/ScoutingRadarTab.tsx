@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
@@ -6,40 +7,33 @@ import { Label } from "@/components/ui/label";
 import { fetchWAToplists, fetchWAAthleteProfiles } from "@/lib/queries";
 import type { WAToplist, WAAthleteProfile } from "@/lib/types";
 import { TOPLIST_DISCIPLINE_GROUPS } from "@/lib/eventGroups";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
-} from "recharts";
 import { Target, Star } from "lucide-react";
 
+const EXTRA_RF_NAMES = new Set([
+  "abhay singh", "anees", "anu raghavan", "atul", "devansh jagga",
+  "dhairyasheel", "gaurav patel", "karishma s sanil", "lakshita",
+  "md sinan", "murad sirman", "nived", "oshin", "poorva sawant",
+  "poorna raorane", "rathish pandidurai", "sandeep gond", "shreyas jadhav",
+  "sonia baishya", "surya p", "usman ali khan", "vikrant malik",
+]);
 
 export function ScoutingRadarTab() {
-  const [toplists, setToplists] = useState<WAToplist[]>([]);
-  const [rfAthletes, setRFAthletes] = useState<WAAthleteProfile[]>([]);
   const [gender, setGender] = useState("M");
   const [discipline, setDiscipline] = useState("100m");
-  const [loading, setLoading] = useState(true);
+  const [showRF, setShowRF] = useState(true);
 
   const genderPrefix = gender === "M" ? "Men's" : "Women's";
   const selectedEvent = `${genderPrefix} ${discipline}`;
 
-  useEffect(() => { loadData(); }, [selectedEvent]);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [toplistData, rfData] = await Promise.all([
-        fetchWAToplists(selectedEvent, gender, 200),
-        fetchWAAthleteProfiles(),
-      ]);
-      setToplists(toplistData);
-      setRFAthletes(rfData);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: toplists = [], isFetching: toplistFetching } = useQuery<WAToplist[]>({
+    queryKey: ["toplists", selectedEvent, gender, 200],
+    queryFn: () => fetchWAToplists(selectedEvent, gender, 200),
+  });
+  const { data: rfAthletes = [] } = useQuery<WAAthleteProfile[]>({
+    queryKey: ["athletes"],
+    queryFn: fetchWAAthleteProfiles,
+  });
+  const loading = toplistFetching;
 
   function handleGenderChange(g: string) {
     setGender(g);
@@ -48,12 +42,23 @@ export function ScoutingRadarTab() {
   }
 
   const rfNamesLower = new Set(rfAthletes.map(a => a.reliance_name.toLowerCase()));
-  const isRF = (name: string) => rfNamesLower.has(name.toLowerCase());
+  const isRF = (name: string) =>
+    rfNamesLower.has(name.toLowerCase()) || EXTRA_RF_NAMES.has(name.toLowerCase());
 
-  const rfInEvent = toplists
-    .filter(t => isRF(t.athlete_name))
-    .map(t => ({ name: t.athlete_name, score: parseInt(t.score) || 0 }))
-    .sort((a, b) => b.score - a.score);
+  // Deduplicated RF athletes in this event, keeping best score per name
+  const rfInEvent = Array.from(
+    toplists
+      .filter(t => isRF(t.athlete_name))
+      .reduce((map, t) => {
+        const key = t.athlete_name.toLowerCase();
+        const cur = map.get(key);
+        if (!cur || (parseInt(t.score) || 0) > (parseInt(cur.score) || 0))
+          map.set(key, { name: t.athlete_name, score: parseInt(t.score) || 0, mark: t.mark, region: t.region });
+        return map;
+      }, new Map<string, { name: string; score: number; mark: string; region: string }>())
+      .values()
+  ).sort((a, b) => b.score - a.score);
+
   const rfBestScore = rfInEvent.length > 0 ? rfInEvent[0].score : null;
 
   // Deduplicate non-RF Indian athletes, keeping highest score per name
@@ -83,12 +88,23 @@ export function ScoutingRadarTab() {
 
   const topTargets = scouts.filter(s => rfBestScore !== null && s.score >= rfBestScore);
 
-  const chartData = scouts.slice(0, 20).map((s, i) => ({
-    rank: i + 1,
-    name: s.name,
-    score: s.score,
-    isTarget: rfBestScore !== null && s.score >= rfBestScore,
-  }));
+  // Build interleaved table rows: scouts keep continuous rank, RF entries are positional markers
+  type TableRow =
+    | { type: "scout"; data: typeof scouts[0]; rank: number }
+    | { type: "rf"; data: typeof rfInEvent[0] };
+
+  const tableRows: TableRow[] = [];
+  let rank = 0;
+  let ri = 0;
+  for (const scout of scouts) {
+    while (ri < rfInEvent.length && rfInEvent[ri].score > scout.score) {
+      tableRows.push({ type: "rf", data: rfInEvent[ri++] });
+    }
+    tableRows.push({ type: "scout", data: scout, rank: ++rank });
+  }
+  while (ri < rfInEvent.length) {
+    tableRows.push({ type: "rf", data: rfInEvent[ri++] });
+  }
 
   const disciplineGroups = TOPLIST_DISCIPLINE_GROUPS[gender] ?? TOPLIST_DISCIPLINE_GROUPS.M;
 
@@ -157,13 +173,13 @@ export function ScoutingRadarTab() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Star className="h-4 w-4 text-blue-500" /> RF Best Score
+              <Star className="h-4 w-4 text-emerald-500" /> RF Best Score
             </CardTitle>
           </CardHeader>
           <CardContent>
             {rfBestScore !== null ? (
               <>
-                <p className="text-3xl font-bold text-blue-600">{rfBestScore}</p>
+                <p className="text-3xl font-bold text-emerald-600">{rfBestScore}</p>
                 <p className="text-xs text-muted-foreground mt-1 truncate">{rfInEvent[0]?.name}</p>
               </>
             ) : (
@@ -220,82 +236,25 @@ export function ScoutingRadarTab() {
         </CardContent>
       </Card>
 
-      {/* Score curve */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Performance Curve — {selectedEvent}</CardTitle>
-          <CardDescription>Non-RF Indian athletes ranked by score (top 20)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">Loading…</div>
-          ) : chartData.length === 0 ? (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">No data for this event</div>
-          ) : (
-            <>
-              <div className="flex gap-4 mb-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> Top targets
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" /> Other candidates
-                </span>
-                {rfBestScore && (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-6 border-t-2 border-blue-500 border-dashed inline-block" /> RF best ({rfBestScore})
-                  </span>
-                )}
-              </div>
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="rank" label={{ value: "Rank", position: "insideBottom", offset: -4 }} tick={{ fontSize: 11 }} />
-                  <YAxis label={{ value: "WA Score", angle: -90, position: "insideLeft" }} tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const d = payload[0].payload;
-                      return (
-                        <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
-                          <p className="font-semibold">{d.name}</p>
-                          <p>Score: <strong>{d.score}</strong></p>
-                          <p className="text-muted-foreground">Rank #{d.rank}</p>
-                        </div>
-                      );
-                    }}
-                  />
-                  {rfBestScore && (
-                    <ReferenceLine y={rfBestScore} stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5 3" />
-                  )}
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#94a3b8"
-                    strokeWidth={2}
-                    dot={(props: any) => {
-                      const { cx, cy, payload } = props;
-                      return (
-                        <circle
-                          key={`dot-${payload.rank}`}
-                          cx={cx} cy={cy} r={4}
-                          fill={payload.isTarget ? "#f59e0b" : "#94a3b8"}
-                          stroke="white" strokeWidth={1.5}
-                        />
-                      );
-                    }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Full scouting table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Scout Candidates</CardTitle>
-          <CardDescription>All Indian non-RF athletes · {selectedEvent} · sorted by score</CardDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>All Scout Candidates</CardTitle>
+              <CardDescription className="mt-1">All Indian non-RF athletes · {selectedEvent} · sorted by score</CardDescription>
+            </div>
+            <button
+              onClick={() => setShowRF(v => !v)}
+              className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                showRF
+                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                  : "bg-muted border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {showRF ? "Hide RF athletes" : "Show RF athletes"}
+            </button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -312,14 +271,46 @@ export function ScoutingRadarTab() {
                 </tr>
               </thead>
               <tbody>
-                {scouts.map((s, i) => {
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">Loading…</td>
+                  </tr>
+                ) : tableRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      No non-RF Indian athletes found for this event
+                    </td>
+                  </tr>
+                ) : tableRows.map((row, i) => {
+                  if (row.type === "rf") {
+                    if (!showRF) return null;
+                    return (
+                      <tr
+                        key={`rf-${i}`}
+                        className="border-b border-emerald-200/60 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/15"
+                      >
+                        <td className="p-2">
+                          <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs">RF</Badge>
+                        </td>
+                        <td className="p-2 font-medium text-emerald-700 dark:text-emerald-400">{row.data.name}</td>
+                        <td className="p-2 text-right font-mono text-emerald-600 dark:text-emerald-400">{row.data.mark}</td>
+                        <td className="p-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">{row.data.score}</td>
+                        <td className="p-2 text-right text-muted-foreground">—</td>
+                        <td className="p-2">
+                          <Badge variant="outline" className="text-xs">{row.data.region}</Badge>
+                        </td>
+                        <td className="p-2 text-xs text-muted-foreground">—</td>
+                      </tr>
+                    );
+                  }
+                  const s = row.data;
                   const isTarget = rfBestScore !== null && s.score >= rfBestScore;
                   return (
                     <tr
-                      key={i}
+                      key={`scout-${i}`}
                       className={`border-b hover:bg-muted/40 ${isTarget ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}
                     >
-                      <td className="p-2 text-muted-foreground">{i + 1}</td>
+                      <td className="p-2 text-muted-foreground">{row.rank}</td>
                       <td className="p-2 font-medium">
                         {isTarget && (
                           <Badge className="bg-amber-500 hover:bg-amber-500 text-white text-xs mr-1.5">Target</Badge>
@@ -348,13 +339,6 @@ export function ScoutingRadarTab() {
                     </tr>
                   );
                 })}
-                {!loading && scouts.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                      No non-RF Indian athletes found for this event
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>

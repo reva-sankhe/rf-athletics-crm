@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
@@ -118,11 +119,11 @@ interface QualRow {
 
 function StatusBadge({ status }: { status: Status }) {
   switch (status) {
-    case "both":         return <Badge className="bg-emerald-600 text-white text-xs">AG + CWG</Badge>;
-    case "qualified_ag": return <Badge className="bg-emerald-600 text-white text-xs">Qual AG</Badge>;
-    case "qualified_cwg":return <Badge className="bg-blue-600 text-white text-xs">Qual CWG</Badge>;
-    case "close_ag":     return <Badge className="bg-amber-500 text-white text-xs">Close AG</Badge>;
-    case "close_cwg":    return <Badge className="bg-orange-400 text-white text-xs">Close CWG</Badge>;
+    case "both":         return <Badge className="bg-emerald-600 text-white text-xs">Reached AG-Q + CWG-Q</Badge>;
+    case "qualified_ag": return <Badge className="bg-emerald-600 text-white text-xs">Reached AG-Q</Badge>;
+    case "qualified_cwg":return <Badge className="bg-blue-600 text-white text-xs">Reached CWG-Q</Badge>;
+    case "close_ag":     return <Badge className="bg-amber-500 text-white text-xs">Close to AG-Q</Badge>;
+    case "close_cwg":    return <Badge className="bg-orange-400 text-white text-xs">Close to CWG-Q</Badge>;
     case "in_progress":  return <Badge variant="outline" className="text-xs">In Progress</Badge>;
   }
 }
@@ -140,32 +141,23 @@ function barColor(status: Status): string {
 }
 
 export function QualificationTrackerTab() {
-  const [standards, setStandards] = useState<WAQualificationStandard[]>([]);
-  const [results, setResults] = useState<WARFAthleteResult[]>([]);
-  const [athletes, setAthletes] = useState<WAAthleteProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: rawStandards = [], isLoading: stdsLoading } = useQuery<WAQualificationStandard[]>({
+    queryKey: ["qual-standards"],
+    queryFn: fetchWAQualificationStandards,
+  });
+  const { data: results = [], isLoading: resultsLoading } = useQuery<WARFAthleteResult[]>({
+    queryKey: ["rf-results-2026"],
+    queryFn: () => fetchWARFAthleteResults(undefined, 2000, 2026),
+  });
+  const { data: athletes = [], isLoading: athletesLoading } = useQuery<WAAthleteProfile[]>({
+    queryKey: ["athletes"],
+    queryFn: fetchWAAthleteProfiles,
+  });
+  const loading = stdsLoading || resultsLoading || athletesLoading;
+  const standards = useMemo(() => rawStandards.filter(s => s.year === 2026), [rawStandards]);
+
   const [filterEvent, setFilterEvent] = useState("all");
   const [filterGender, setFilterGender] = useState("all");
-
-  useEffect(() => { loadData(); }, []);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [stds, res, ath] = await Promise.all([
-        fetchWAQualificationStandards(),
-        fetchWARFAthleteResults(undefined, 500),
-        fetchWAAthleteProfiles(),
-      ]);
-      setStandards(stds);
-      setResults(res);
-      setAthletes(ath);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const rows: QualRow[] = athletes.flatMap(athlete => {
     const gender = athlete.gender || "M";
@@ -227,19 +219,18 @@ export function QualificationTrackerTab() {
     });
   });
 
-  // Cards always reflect ALL events (no filter applied)
-  const qualifiedAGSet = new Set(rows.filter(r => r.status === "qualified_ag" || r.status === "both").map(r => r.athleteId));
-  const qualifiedCWGSet = new Set(rows.filter(r => r.status === "qualified_cwg" || r.status === "both").map(r => r.athleteId));
-  // Close counts: independent — an athlete-event can be close to both
-  const closeAGCount = rows.filter(r => r.agGap !== null && r.agGap >= 0 && r.agGap < 2).length;
-  const closeCWGCount = rows.filter(r => r.cwgGap !== null && r.cwgGap >= 0 && r.cwgGap < 2).length;
-
   // Table respects both filters
   const filtered = rows.filter(r => {
     if (filterEvent !== "all" && r.event !== filterEvent) return false;
     if (filterGender !== "all" && r.gender !== filterGender) return false;
     return true;
   });
+
+  // Tiles reflect current filters
+  const qualifiedAGSet = new Set(filtered.filter(r => r.status === "qualified_ag" || r.status === "both").map(r => r.athleteId));
+  const qualifiedCWGSet = new Set(filtered.filter(r => r.status === "qualified_cwg" || r.status === "both").map(r => r.athleteId));
+  const closeAGCount = filtered.filter(r => r.agGap !== null && r.agGap >= 0 && r.agGap < 2).length;
+  const closeCWGCount = filtered.filter(r => r.cwgGap !== null && r.cwgGap >= 0 && r.cwgGap < 2).length;
 
   // Chart — only rendered when a specific event is selected
   const direction = filterEvent !== "all" ? classifyEvent(filterEvent).direction : "lower_better";
@@ -283,12 +274,12 @@ export function QualificationTrackerTab() {
 
   return (
     <div className="space-y-4">
-      {/* Summary cards — always show all-events totals */}
+      {/* Summary cards — reflect current filters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Qualified AG
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Reached AG - Q
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -299,7 +290,7 @@ export function QualificationTrackerTab() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-blue-600" /> Qualified CWG
+              <CheckCircle2 className="h-4 w-4 text-blue-600" /> Reached CWG - Q
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -310,7 +301,7 @@ export function QualificationTrackerTab() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-500" /> Close AG
+              <AlertCircle className="h-4 w-4 text-amber-500" /> Close to AG-Q
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -321,7 +312,7 @@ export function QualificationTrackerTab() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-orange-400" /> Close CWG
+              <AlertCircle className="h-4 w-4 text-orange-400" /> Close to CWG-Q
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -538,7 +529,7 @@ export function QualificationTrackerTab() {
       <Card>
         <CardHeader>
           <CardTitle>All Athletes × Events</CardTitle>
-              <CardDescription>Complete qualification tracker · green = qualified · amber = close AG · orange = close CWG</CardDescription>
+              <CardDescription>Complete qualification tracker · 2026 results only · green = reached Q standard · amber = close to AG-Q · orange = close to CWG-Q</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

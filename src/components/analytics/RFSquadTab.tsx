@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,27 +59,15 @@ interface AthleteSummary {
 
 export function RFSquadTab() {
   const [, navigate] = useLocation();
-  const [athletes, setAthletes] = useState<WAAthleteProfile[]>([]);
-  const [results, setResults] = useState<WARFAthleteResult[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => { loadData(); }, []);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [athletesData, resultsData] = await Promise.all([
-        fetchWAAthleteProfiles(),
-        fetchWARFAthleteResults(undefined, 1000),
-      ]);
-      setAthletes(athletesData);
-      setResults(resultsData);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: athletes = [], isLoading: athletesLoading } = useQuery<WAAthleteProfile[]>({
+    queryKey: ["athletes"],
+    queryFn: fetchWAAthleteProfiles,
+  });
+  const { data: results = [], isLoading: resultsLoading } = useQuery<WARFAthleteResult[]>({
+    queryKey: ["rf-results", 1000],
+    queryFn: () => fetchWARFAthleteResults(undefined, 1000),
+  });
+  const loading = athletesLoading || resultsLoading;
 
   const summaries: AthleteSummary[] = athletes.flatMap(athlete => {
     const athResults = results

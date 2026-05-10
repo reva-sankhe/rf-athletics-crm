@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,16 +12,19 @@ import EventDetail from "@/pages/EventDetail";
 import Analytics from "@/pages/Analytics";
 import NotFound from "@/pages/not-found";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5 * 60 * 1000 } },
+});
 
 function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Events} />
+        <Route path="/">{() => <Redirect to="/analytics" />}</Route>
+        <Route path="/events" component={Events} />
+        <Route path="/events/:event" component={EventDetail} />
         <Route path="/athletes" component={Athletes} />
         <Route path="/athletes/:id" component={AthleteDetail} />
-        <Route path="/events/:event" component={EventDetail} />
         <Route path="/analytics" component={Analytics} />
         <Route component={NotFound} />
       </Switch>

@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
@@ -68,16 +69,17 @@ interface BarEntry {
 }
 
 export function GlobalStandingsTab() {
-  const [toplists, setToplists] = useState<WAToplist[]>([]);
-  const [rfAthletes, setRFAthletes] = useState<WAAthleteProfile[]>([]);
   const [selectedGender, setSelectedGender] = useState("M");
   const [selectedDiscipline, setSelectedDiscipline] = useState("100m");
   const [selectedRegion, setSelectedRegion] = useState("all");
   const [sortMode, setSortMode] = useState<"score" | "mark">("score");
-  const [loading, setLoading] = useState(true);
-  const [benchmark, setBenchmark] = useState<EventBenchmark | null>(null);
 
   const selectedEvent = `${selectedGender === "M" ? "Men's" : "Women's"} ${selectedDiscipline}`;
+
+  const fetchRegion =
+    selectedRegion === "asia"  ? "Asia"  :
+    selectedRegion === "india" ? "India" :
+    "Global";
 
   function handleGenderChange(g: string) {
     setSelectedGender(g);
@@ -85,36 +87,19 @@ export function GlobalStandingsTab() {
     if (!allEvents.includes(selectedDiscipline)) setSelectedDiscipline(allEvents[0]);
   }
 
-  useEffect(() => { loadData(); }, [selectedEvent, selectedRegion]);
-
-  async function loadData() {
-    setLoading(true);
-    try {
-      const gender = selectedGender;
-      // Map UI region filter to the wa_toplists region column value so that
-      // the rank field in each returned row is the true WA rank for that scope.
-      // "all"   → fetch Global region (WA world rankings)
-      // "asia"  → fetch Asia region   (WA Asian rankings)
-      // "india" → fetch India region  (WA India-specific rankings)
-      const fetchRegion =
-        selectedRegion === "asia"  ? "Asia"   :
-        selectedRegion === "india" ? "India"  :
-        "Global";
-
-      const [toplistData, rfData, benchmarkData] = await Promise.all([
-        fetchWAToplists(selectedEvent, gender, 2000, fetchRegion),
-        fetchWAAthleteProfiles(),
-        fetchEventBenchmark(selectedEvent),
-      ]);
-      setToplists(toplistData);
-      setRFAthletes(rfData);
-      setBenchmark(benchmarkData);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: toplists = [], isFetching: toplistFetching } = useQuery<WAToplist[]>({
+    queryKey: ["toplists", selectedEvent, selectedGender, fetchRegion, 2000],
+    queryFn: () => fetchWAToplists(selectedEvent, selectedGender, 2000, fetchRegion),
+  });
+  const { data: rfAthletes = [] } = useQuery<WAAthleteProfile[]>({
+    queryKey: ["athletes"],
+    queryFn: fetchWAAthleteProfiles,
+  });
+  const { data: benchmark = null } = useQuery<EventBenchmark | null>({
+    queryKey: ["benchmark", selectedEvent],
+    queryFn: () => fetchEventBenchmark(selectedEvent),
+  });
+  const loading = toplistFetching;
 
   const rfNamesLower = new Set(rfAthletes.map(a => a.reliance_name.toLowerCase()));
   const isRF = (name: string) => rfNamesLower.has(name.toLowerCase());

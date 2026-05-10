@@ -1,6 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents, fetchAthleteRankings, fetchWARFAthleteResults } from "@/lib/queries";
+import { AthleteTrendCard } from "@/components/analytics/AthleteTrendCard";
 import { Skeleton } from "@/components/Skeleton";
 import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking, WARFAthleteResult } from "@/lib/types";
 import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart, X } from "lucide-react";
@@ -10,85 +12,50 @@ import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis, YAxis, Resp
 export default function AthleteDetail() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [athlete, setAthlete] = useState<WAAthleteProfile | null>(null);
-  const [honours, setHonours] = useState<WAAthleteHonour[]>([]);
-  const [personalBests, setPersonalBests] = useState<WAAthletePersonalBest[]>([]);
-  const [athleteEvents, setAthleteEvents] = useState<AthleteEvent[]>([]);
-  const [matchedPersonalBests, setMatchedPersonalBests] = useState<PersonalBestWithEvent[]>([]);
-  const [rankings, setRankings] = useState<WARanking[]>([]);
-  const [competitionResults, setCompetitionResults] = useState<WARFAthleteResult[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedEventFilters, setSelectedEventFilters] = useState<Set<string>>(new Set());
+  const [trendDiscipline, setTrendDiscipline] = useState<string>("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const profile = await fetchWAAthleteProfile(id!);
-      setAthlete(profile);
-      
-      // Try to fetch rankings by athlete name
-      if (profile?.reliance_name) {
-        try {
-          const athleteRankings = await fetchAthleteRankings(profile.reliance_name);
-          setRankings(athleteRankings);
-        } catch (rankingError) {
-          console.warn("Could not fetch athlete rankings:", rankingError);
-          setRankings([]);
-        }
-      }
-      
-      // Try to fetch athlete events from new normalized table
-      try {
-        const events = await fetchAthleteEvents(id!);
-        setAthleteEvents(events);
-      } catch (eventsError) {
-        console.warn("Could not fetch athlete events:", eventsError);
-        setAthleteEvents([]);
-      }
-      
-      // Try to fetch matched personal bests for athlete's events
-      try {
-        const pbsWithEvents = await fetchPersonalBestsForAthleteEvents(id!);
-        setMatchedPersonalBests(pbsWithEvents);
-      } catch (matchedPBError) {
-        console.warn("Could not fetch matched personal bests:", matchedPBError);
-        setMatchedPersonalBests([]);
-      }
-      
-      // Try to fetch personal bests, but don't fail if it doesn't work
-      try {
-        const athletePBs = await fetchWAAthletePersonalBests(id!);
-        setPersonalBests(athletePBs);
-      } catch (pbError) {
-        console.warn("Could not fetch athlete personal bests:", pbError);
-        setPersonalBests([]);
-      }
-      
-      // Try to fetch honours, but don't fail if it doesn't work
-      try {
-        const athleteHonours = await fetchWAAthleteHonours(id!);
-        setHonours(athleteHonours);
-      } catch (honoursError) {
-        console.warn("Could not fetch athlete honours:", honoursError);
-        setHonours([]);
-      }
+  const { data: athlete, isLoading: profileLoading } = useQuery<WAAthleteProfile | null>({
+    queryKey: ["athlete", id],
+    queryFn: () => fetchWAAthleteProfile(id!),
+    enabled: !!id,
+  });
+  const { data: rankings = [] } = useQuery<WARanking[]>({
+    queryKey: ["athlete-rankings", athlete?.reliance_name],
+    queryFn: () => fetchAthleteRankings(athlete!.reliance_name!),
+    enabled: !!athlete?.reliance_name,
+  });
+  const { data: athleteEvents = [] } = useQuery<AthleteEvent[]>({
+    queryKey: ["athlete-events", id],
+    queryFn: () => fetchAthleteEvents(id!),
+    enabled: !!id,
+  });
+  const { data: matchedPersonalBests = [] } = useQuery<PersonalBestWithEvent[]>({
+    queryKey: ["athlete-pbs-matched", id],
+    queryFn: () => fetchPersonalBestsForAthleteEvents(id!),
+    enabled: !!id,
+  });
+  const { data: personalBests = [] } = useQuery<WAAthletePersonalBest[]>({
+    queryKey: ["athlete-pbs", id],
+    queryFn: () => fetchWAAthletePersonalBests(id!),
+    enabled: !!id,
+  });
+  const { data: honours = [] } = useQuery<WAAthleteHonour[]>({
+    queryKey: ["athlete-honours", id],
+    queryFn: () => fetchWAAthleteHonours(id!),
+    enabled: !!id,
+  });
+  const { data: rawResults = [], isLoading: resultsLoading } = useQuery<WARFAthleteResult[]>({
+    queryKey: ["athlete-rf-results", id],
+    queryFn: () => fetchWARFAthleteResults(id!, 200),
+    enabled: !!id,
+  });
 
-      // Try to fetch WA competition results
-      try {
-        const results = await fetchWARFAthleteResults(id!, 200);
-        setCompetitionResults(results.filter(r => !r.not_legal).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      } catch (resultsError) {
-        console.warn("Could not fetch competition results:", resultsError);
-        setCompetitionResults([]);
-      }
-    } catch (error) {
-      console.error("Error loading athlete:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const competitionResults = rawResults
+    .filter(r => !r.not_legal)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  useEffect(() => { load(); }, [load]);
+  const loading = profileLoading || resultsLoading;
 
   if (loading || !athlete) {
     return (
@@ -460,6 +427,47 @@ export default function AthleteDetail() {
           </div>
         </div>
       </div>
+
+      {/* Performance Trends */}
+      {(() => {
+        const trendDisciplines = Array.from(
+          new Set(competitionResults.map(r => r.discipline).filter(Boolean))
+        ).sort();
+        if (trendDisciplines.length === 0) return null;
+        const activeDiscipline = trendDiscipline || trendDisciplines[0];
+        return (
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                <TrendingUp size={12} />
+                Performance Trends
+              </div>
+              {trendDisciplines.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {trendDisciplines.map(disc => (
+                    <button
+                      key={disc}
+                      onClick={() => setTrendDiscipline(disc)}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                        disc === activeDiscipline
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {disc}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <AthleteTrendCard
+              athleteName={athlete.reliance_name || athlete.aa_athlete_id}
+              results={competitionResults}
+              discipline={activeDiscipline}
+            />
+          </div>
+        );
+      })()}
 
       {/* Personal Bests Card */}
       <div className="bg-card border border-border rounded-2xl p-6">

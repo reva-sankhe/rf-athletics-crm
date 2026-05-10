@@ -257,17 +257,16 @@ export async function fetchWAResults(competitionId?: number, limit = 100): Promi
 }
 
 // WA RF Athlete Results
-export async function fetchWARFAthleteResults(athleteId?: string, limit = 100): Promise<WARFAthleteResult[]> {
+export async function fetchWARFAthleteResults(athleteId?: string, limit = 100, year?: number): Promise<WARFAthleteResult[]> {
   let query = supabase
     .from("wa_rf_athlete_results")
     .select("*")
     .order("date", { ascending: false })
     .limit(limit);
-  
-  if (athleteId) {
-    query = query.eq("aa_athlete_id", athleteId);
-  }
-  
+
+  if (athleteId) query = query.eq("aa_athlete_id", athleteId);
+  if (year)      query = query.eq("year", year);
+
   const { data, error } = await query;
   if (error) throw error;
   return data as WARFAthleteResult[];
@@ -332,6 +331,15 @@ export async function fetchFinalistsForEvent(
       .not("name", "ilike", "%youth%")
       .not("name", "ilike", "%invitational%")
       .not("name", "ilike", "%anniversary%");
+    (data ?? []).forEach((c: { id: number }) => compIds.push(c.id));
+  }
+
+  if (competition === "Olympics" || competition === "All Major") {
+    const { data } = await supabase
+      .from("wa_competitions")
+      .select("id")
+      .ilike("name", "%olympic games%")
+      .not("name", "ilike", "%youth%");
     (data ?? []).forEach((c: { id: number }) => compIds.push(c.id));
   }
 

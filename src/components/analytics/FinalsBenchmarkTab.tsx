@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Label } from "@/components/ui/label";
@@ -6,8 +7,9 @@ import {
   fetchAllEventBenchmarks,
   fetchWAAthleteProfiles,
   fetchWARFAthleteResults,
+  fetchFinalistsForEvent,
 } from "@/lib/queries";
-import type { EventBenchmark, WAAthleteProfile, WARFAthleteResult } from "@/lib/types";
+import type { EventBenchmark, WAAthleteProfile, WARFAthleteResult, WAResult } from "@/lib/types";
 import { BENCHMARK_EVENT_GROUPS } from "@/lib/eventGroups";
 import { normalizeEventName, classifyEvent } from "@/lib/eventUtils";
 import { Medal, Target, Users, Zap } from "lucide-react";
@@ -86,37 +88,37 @@ function progressPct(athleteVal: number, baseVal: number, event: string): number
 
 
 export function FinalsBenchmarkTab() {
-  const [benchmarks, setBenchmarks] = useState<EventBenchmark[]>([]);
-  const [rfAthletes, setRfAthletes] = useState<WAAthleteProfile[]>([]);
-  const [rfResults, setRfResults] = useState<WARFAthleteResult[]>([]);
-  const [loading, setLoading] = useState(true);
   const [event, setEvent] = useState("100m");
   const [gender, setGender] = useState("M");
   const [tournament, setTournament] = useState<Tournament>("AG");
 
-  useEffect(() => { loadData(); }, []);
+  // Derived constants needed in query keys — must come before useQuery hooks
+  const benchmarkGender = gender === "W" ? "F" : "M";
+  const competitionFilter =
+    tournament === "AG" ? "Asian Games"
+    : tournament === "CWG" ? "Commonwealth Games"
+    : "Olympics";
 
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [bm, ath, res] = await Promise.all([
-        fetchAllEventBenchmarks(),
-        fetchWAAthleteProfiles(),
-        fetchWARFAthleteResults(undefined, 1000),
-      ]);
-      setBenchmarks(bm);
-      setRfAthletes(ath);
-      setRfResults(res);
-    } catch (e) {
-      console.error("FinalsBenchmarkTab load error:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: benchmarks = [], isLoading: bmLoading } = useQuery<EventBenchmark[]>({
+    queryKey: ["benchmarks"],
+    queryFn: fetchAllEventBenchmarks,
+  });
+  const { data: rfAthletes = [], isLoading: athletesLoading } = useQuery<WAAthleteProfile[]>({
+    queryKey: ["athletes"],
+    queryFn: () => fetchWAAthleteProfiles(),
+  });
+  const { data: rfResults = [], isLoading: resultsLoading } = useQuery<WARFAthleteResult[]>({
+    queryKey: ["rf-results-2026"],
+    queryFn: () => fetchWARFAthleteResults(undefined, 1000, 2026),
+  });
+  const { data: finalistsRaw = [] } = useQuery<WAResult[]>({
+    queryKey: ["finalists", competitionFilter, benchmarkGender],
+    queryFn: () => fetchFinalistsForEvent(competitionFilter, benchmarkGender),
+  });
+  const loading = bmLoading || athletesLoading || resultsLoading;
 
   const eventNorm = normalizeEventName(event);
   const isHigherBetter = classifyEvent(event).direction === "higher_better";
-  const benchmarkGender = gender === "W" ? "F" : "M";
 
   const benchmark = benchmarks.find(
     (b) => normalizeEventName(b.event_name) === eventNorm && b.gender === benchmarkGender
@@ -155,10 +157,9 @@ export function FinalsBenchmarkTab() {
   const goldPos = refBase !== null && refGold !== null
     ? parseFloat(progressPct(refGold, refBase, event).toFixed(1))
     : null;
-  // Qual std is x=0 when refBase === refQual; hide when refBase === refBronze (no qual data)
   const showQualLine = refQual !== null;
 
-  // Median medal age for the selected tournament only
+  // Medal age: range + median for selected tournament
   const medalAges = (
     tournament === "AG"
       ? [benchmark?.asian_games_gold_age, benchmark?.asian_games_silver_age, benchmark?.asian_games_bronze_age]
@@ -171,8 +172,10 @@ export function FinalsBenchmarkTab() {
     medalAges.length > 0
       ? [...medalAges].sort((a, b) => a - b)[Math.floor(medalAges.length / 2)]
       : null;
+  const minMedalAge = medalAges.length > 0 ? Math.min(...medalAges) : null;
+  const maxMedalAge = medalAges.length > 0 ? Math.max(...medalAges) : null;
 
-  // ── RF Athletes: find best result by actual parsed mark value ──────────────
+  // ── RF Athletes: find best 2026 result by actual parsed mark value ──────────
   const rfProspects = rfAthletes
     .filter((athlete) => athlete.gender === benchmarkGender)
     .flatMap((athlete) => {
@@ -220,9 +223,37 @@ export function FinalsBenchmarkTab() {
       name: p.name,
       progress: parseFloat(progressPct(p.val!, refBase!, event).toFixed(1)),
       gapToBronze: p.gapToBronze,
+      gapToSilver: p.val !== null && refSilver !== null
+        ? parseFloat(calcGapPct(p.val, refSilver, event).toFixed(1)) : null,
+      gapToGold: p.val !== null && refGold !== null
+        ? parseFloat(calcGapPct(p.val, refGold, event).toFixed(1)) : null,
+      gapToQual: p.val !== null && refQual !== null
+        ? parseFloat(calcGapPct(p.val, refQual, event).toFixed(1)) : null,
       mark: p.bestMark,
       age: p.age,
     }));
+
+  // Bell curve: historical medal age distribution for selected tournament + event
+  const medalistAges = finalistsRaw
+    .filter(
+      (r) =>
+        ["1", "2", "3"].includes(r.place) &&
+        normalizeEventName(r.discipline) === eventNorm &&
+        r.athlete_age > 0
+    )
+    .map((r) => Math.round(r.athlete_age));
+
+  const ageBuckets: Record<number, number> = {};
+  for (const age of medalistAges) {
+    ageBuckets[age] = (ageBuckets[age] ?? 0) + 1;
+  }
+  const bellCurveData = Object.entries(ageBuckets)
+    .map(([age, count]) => ({ age: Number(age), count }))
+    .sort((a, b) => a.age - b.age);
+
+  const rfAgesForBell = rfProspects
+    .filter((p) => p.age !== null && p.age > 0)
+    .map((p) => ({ name: p.name, age: p.age as number }));
 
   return (
     <div className="space-y-4">
@@ -261,7 +292,7 @@ export function FinalsBenchmarkTab() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Tournament</Label>
+              <Label className="text-xs">Competition</Label>
               <div className="flex gap-1">
                 {TOURNAMENTS.map((t) => (
                   <button
@@ -292,7 +323,7 @@ export function FinalsBenchmarkTab() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{rfProspects.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">athletes with results</p>
+            <p className="text-xs text-muted-foreground mt-1">athletes with 2026 results</p>
           </CardContent>
         </Card>
         <Card>
@@ -328,7 +359,11 @@ export function FinalsBenchmarkTab() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{medianMedalAge ?? "—"}</p>
-            <p className="text-xs text-muted-foreground mt-1">median age at medal</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {minMedalAge !== null && maxMedalAge !== null && minMedalAge !== maxMedalAge
+                ? `range: ${minMedalAge}–${maxMedalAge} · median`
+                : "median age at medal"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -393,11 +428,74 @@ export function FinalsBenchmarkTab() {
         </CardContent>
       </Card>
 
+      {/* Medal Age Distribution */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Medal Age Distribution — {refLabel}</CardTitle>
+          <CardDescription>
+            Historical age of {refLabel} medalists in {event} · amber lines = RF athletes' current age
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {bellCurveData.length === 0 ? (
+            <div className="h-[220px] flex items-center justify-center text-muted-foreground text-sm">
+              No historical medalist data for {event} ({refLabel})
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart
+                data={bellCurveData}
+                margin={{ top: 24, right: 20, bottom: 20, left: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="age"
+                  tick={{ fontSize: 11 }}
+                  label={{ value: "Age", position: "insideBottom", offset: -10, fontSize: 11 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 11 }}
+                  width={28}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div className="bg-card border border-border rounded-lg p-2 shadow-lg text-xs">
+                        <p>Age {d.age}: <span className="font-bold">{d.count} medalist{d.count !== 1 ? "s" : ""}</span></p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="count" fill="#94a3b8" radius={[3, 3, 0, 0]} barSize={20} />
+                {rfAgesForBell.map((rf, i) => (
+                  <ReferenceLine
+                    key={rf.name}
+                    x={rf.age}
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                    label={{
+                      value: rf.name.split(" ")[0],
+                      position: i % 2 === 0 ? "insideTopRight" : "insideTopLeft",
+                      fontSize: 9,
+                      fill: "#f59e0b",
+                    }}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Progress chart: Qual Std → Bronze → Silver → Gold */}
       {refBase !== null && barChartData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Performance Progress — {event}</CardTitle>
+            <CardTitle>2026 Performance vs {refLabel} Standards</CardTitle>
             <CardDescription>
               Each bar shows how far the athlete has progressed through {refLabel} milestones · right = closer to gold
             </CardDescription>
@@ -426,19 +524,49 @@ export function FinalsBenchmarkTab() {
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const d = payload[0].payload;
-                    const gap = d.gapToBronze;
+
+                    let gapText: string | null = null;
+                    let gapColor = "text-rose-500 font-medium";
+
+                    if (d.gapToBronze !== null) {
+                      if (d.gapToBronze > 0) {
+                        // Below bronze
+                        if (d.gapToQual !== null && d.gapToQual > 0) {
+                          gapText = `${d.gapToQual.toFixed(1)}% from Qual Std`;
+                          gapColor = "text-rose-500 font-medium";
+                        } else {
+                          gapText = `${d.gapToBronze.toFixed(1)}% from ${refShort} Bronze`;
+                          gapColor = d.gapToBronze <= 5 ? "text-amber-500 font-medium" : "text-rose-500 font-medium";
+                        }
+                      } else {
+                        // At or above bronze
+                        if (d.gapToSilver !== null && d.gapToSilver > 0) {
+                          // Below silver
+                          gapText = `${d.gapToSilver.toFixed(1)}% from ${refShort} Silver`;
+                          gapColor = "text-amber-500 font-medium";
+                        } else if (d.gapToSilver !== null && d.gapToSilver <= 0) {
+                          // At or above silver
+                          if (d.gapToGold !== null && d.gapToGold > 0) {
+                            gapText = `${d.gapToGold.toFixed(1)}% from ${refShort} Gold`;
+                            gapColor = "text-emerald-600 font-medium";
+                          } else {
+                            gapText = `${Math.abs(d.gapToGold ?? d.gapToSilver).toFixed(1)}% above ${d.gapToGold !== null && d.gapToGold <= 0 ? `${refShort} Gold` : `${refShort} Silver`}`;
+                            gapColor = "text-emerald-600 font-medium";
+                          }
+                        } else {
+                          // No silver data — just show above bronze
+                          gapText = `${Math.abs(d.gapToBronze).toFixed(1)}% above ${refShort} Bronze`;
+                          gapColor = "text-emerald-600 font-medium";
+                        }
+                      }
+                    }
+
                     return (
                       <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm space-y-1">
                         <p className="font-semibold">{d.name}</p>
                         <p className="font-mono text-muted-foreground">{d.mark}</p>
                         {d.age && <p className="text-muted-foreground">Age: {d.age}</p>}
-                        {gap !== null && (
-                          <p className={gap <= 0 ? "text-emerald-600 font-medium" : gap <= 5 ? "text-amber-500 font-medium" : "text-rose-500 font-medium"}>
-                            {gap <= 0
-                              ? `${Math.abs(gap)}% above ${refShort} Bronze`
-                              : `${gap}% from ${refShort} Bronze`}
-                          </p>
-                        )}
+                        {gapText && <p className={gapColor}>{gapText}</p>}
                       </div>
                     );
                   }}

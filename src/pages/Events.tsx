@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MetricCardSkeleton } from "@/components/Skeleton";
 import { fetchWAAthleteProfiles } from "@/lib/queries";
 import { type WAAthleteProfile } from "@/lib/types";
@@ -15,20 +15,10 @@ const EVENT_COLORS = [
 ];
 
 export default function Events() {
-  const [athletes, setAthletes] = useState<WAAthleteProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchWAAthleteProfiles();
-      setAthletes(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const { data: athletes = [], isLoading: loading } = useQuery<WAAthleteProfile[]>({
+    queryKey: ["athletes"],
+    queryFn: fetchWAAthleteProfiles,
+  });
 
   const womensEventCounts: Record<string, number> = {};
   const mensEventCounts: Record<string, number> = {};

@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   useReactTable,
@@ -13,39 +14,42 @@ import {
 } from "@tanstack/react-table";
 import { TableSkeleton } from "@/components/Skeleton";
 import { EmptyState } from "@/components/EmptyState";
-import { fetchWAAthleteProfiles, getUniqueEvents } from "@/lib/queries";
-import type { WAAthleteProfile } from "@/lib/types";
+import { fetchWAAthleteProfiles, getUniqueEvents, fetchWARFAthleteResults } from "@/lib/queries";
+import type { WAAthleteProfile, WARFAthleteResult } from "@/lib/types";
+import { AthleteTrendCard } from "@/components/analytics/AthleteTrendCard";
 import { Users, Search, ChevronRight, ArrowUpDown, ChevronLeft, ChevronRight as ChevronRightIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default function Athletes() {
-  const [athletes, setAthletes] = useState<WAAthleteProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: athletes = [], isLoading: athletesLoading } = useQuery<WAAthleteProfile[]>({
+    queryKey: ["athletes"],
+    queryFn: fetchWAAthleteProfiles,
+  });
+  const { data: allResults = [], isLoading: resultsLoading } = useQuery<WARFAthleteResult[]>({
+    queryKey: ["rf-results", 2000],
+    queryFn: () => fetchWARFAthleteResults(undefined, 2000),
+  });
+  const loading = athletesLoading || resultsLoading;
+
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterEvent, setFilterEvent] = useState("");
   const [filterGender, setFilterGender] = useState("");
-  const [availableEvents, setAvailableEvents] = useState<string[]>([]);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchWAAthleteProfiles();
-      setAthletes(data);
-      setAvailableEvents(getUniqueEvents(data));
-    } catch (error) {
-      console.error("Error loading athletes:", error);
-      setAthletes([]);
-    } finally {
-      setLoading(false);
-    }
+  const availableEvents = useMemo(() => getUniqueEvents(athletes), [athletes]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearch(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setDebouncedSearch(value), 200);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  const columns: ColumnDef<WAAthleteProfile>[] = [
+  const columns = useMemo<ColumnDef<WAAthleteProfile>[]>(() => [
     {
       accessorKey: "reliance_name",
       header: "Name",
@@ -120,11 +124,12 @@ export default function Athletes() {
         </Link>
       ),
     },
-  ];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], []);
 
-  const filteredData = athletes.filter((athlete) => {
-    if (search) {
-      const q = search.toLowerCase();
+  const filteredData = useMemo(() => athletes.filter((athlete) => {
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
       if (!athlete.reliance_name?.toLowerCase().includes(q) && !athlete.aa_athlete_id?.toLowerCase().includes(q)) return false;
     }
     if (filterEvent && athlete.reliance_events) {
@@ -133,7 +138,7 @@ export default function Athletes() {
     }
     if (filterGender && athlete.gender !== filterGender) return false;
     return true;
-  });
+  }), [athletes, debouncedSearch, filterEvent, filterGender]);
 
   const table = useReactTable({
     data: filteredData,
@@ -174,7 +179,7 @@ export default function Athletes() {
             type="search"
             placeholder="Search name or ID…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={handleSearchChange}
             className="pl-8 pr-3 py-1.5 bg-muted border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary w-48"
             data-testid="input-search-athletes"
           />
@@ -201,6 +206,11 @@ export default function Athletes() {
           <option value="F">Female</option>
         </select>
       </div>
+
+      {/* Event filter hint */}
+      {!filterEvent && (
+        <p className="text-xs text-muted-foreground -mt-1">Select an event above to view performance trends</p>
+      )}
 
       {/* Table */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -280,6 +290,28 @@ export default function Athletes() {
           </>
         )}
       </div>
+      {/* Performance Trends */}
+      {filterEvent && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground">Performance Trends — {filterEvent}</h2>
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading trends…</p>
+          ) : filteredData.filter(a => allResults.some(r => r.aa_athlete_id === a.aa_athlete_id && r.discipline === filterEvent)).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No result data available for this event.</p>
+          ) : (
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+              {filteredData.map(athlete => (
+                <AthleteTrendCard
+                  key={athlete.aa_athlete_id}
+                  athleteName={athlete.reliance_name || athlete.aa_athlete_id}
+                  results={allResults.filter(r => r.aa_athlete_id === athlete.aa_athlete_id)}
+                  discipline={filterEvent}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

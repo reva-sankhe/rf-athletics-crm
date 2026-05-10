@@ -4,7 +4,6 @@ import { RFSquadTab } from "@/components/analytics/RFSquadTab";
 import { GlobalStandingsTab } from "@/components/analytics/GlobalStandingsTab";
 import { QualificationTrackerTab } from "@/components/analytics/QualificationTrackerTab";
 import { ScoutingRadarTab } from "@/components/analytics/ScoutingRadarTab";
-import { PerformanceTrendsTab } from "@/components/analytics/PerformanceTrendsTab";
 import { FinalsBenchmarkTab } from "@/components/analytics/FinalsBenchmarkTab";
 
 export default function Analytics() {
@@ -20,9 +19,8 @@ export default function Analytics() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="squad">RF Squad</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
           <TabsTrigger value="standings">Global Standings</TabsTrigger>
           <TabsTrigger value="qualification">Qualification</TabsTrigger>
           <TabsTrigger value="scouting">Scouting</TabsTrigger>
@@ -31,10 +29,6 @@ export default function Analytics() {
 
         <TabsContent value="squad" className="space-y-4">
           <RFSquadTab />
-        </TabsContent>
-
-        <TabsContent value="trends" className="space-y-4">
-          <PerformanceTrendsTab />
         </TabsContent>
 
         <TabsContent value="standings" className="space-y-4">
