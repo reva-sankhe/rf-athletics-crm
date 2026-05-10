@@ -237,7 +237,7 @@ export function FinalsBenchmarkTab() {
   const medalistAges = finalistsRaw
     .filter(
       (r) =>
-        ["1", "2", "3"].includes(r.place) &&
+        (parseInt(r.place) >= 1 && parseInt(r.place) <= 3) &&
         normalizeEventName(r.discipline) === eventNorm &&
         r.athlete_age > 0
     )
