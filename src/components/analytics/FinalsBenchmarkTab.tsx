@@ -23,6 +23,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  AreaChart,
+  Area,
 } from "recharts";
 
 const GENDERS = [
@@ -233,7 +235,7 @@ export function FinalsBenchmarkTab() {
       age: p.age,
     }));
 
-  // Bell curve: historical medal age distribution for selected tournament + event
+  // Bell curve: fit a normal distribution to historical medal ages
   const medalistAges = finalistsRaw
     .filter(
       (r) =>
@@ -241,15 +243,31 @@ export function FinalsBenchmarkTab() {
         normalizeEventName(r.discipline) === eventNorm &&
         r.athlete_age > 0
     )
-    .map((r) => Math.round(r.athlete_age));
+    .map((r) => r.athlete_age);
 
-  const ageBuckets: Record<number, number> = {};
-  for (const age of medalistAges) {
-    ageBuckets[age] = (ageBuckets[age] ?? 0) + 1;
-  }
-  const bellCurveData = Object.entries(ageBuckets)
-    .map(([age, count]) => ({ age: Number(age), count }))
-    .sort((a, b) => a.age - b.age);
+  const bellCurveData = (() => {
+    if (medalistAges.length < 2) return [];
+    const n = medalistAges.length;
+    const mean = medalistAges.reduce((s, a) => s + a, 0) / n;
+    const variance = medalistAges.reduce((s, a) => s + (a - mean) ** 2, 0) / n;
+    const std = Math.sqrt(variance);
+    if (std === 0) return [];
+    const lo = Math.floor(mean - 3.5 * std);
+    const hi = Math.ceil(mean + 3.5 * std);
+    const points: { age: number; density: number }[] = [];
+    for (let x = lo; x <= hi; x += 0.2) {
+      const density = Math.exp(-0.5 * ((x - mean) / std) ** 2) / (std * Math.sqrt(2 * Math.PI));
+      points.push({ age: parseFloat(x.toFixed(1)), density: parseFloat(density.toFixed(4)) });
+    }
+    return points;
+  })();
+
+  const bellMean = medalistAges.length > 0
+    ? medalistAges.reduce((s, a) => s + a, 0) / medalistAges.length
+    : null;
+  const bellStd = medalistAges.length > 1
+    ? Math.sqrt(medalistAges.reduce((s, a) => s + (a - bellMean!) ** 2, 0) / medalistAges.length)
+    : null;
 
   const rfAgesForBell = rfProspects
     .filter((p) => p.age !== null && p.age > 0)
@@ -433,59 +451,98 @@ export function FinalsBenchmarkTab() {
         <CardHeader>
           <CardTitle>Medal Age Distribution — {refLabel}</CardTitle>
           <CardDescription>
-            Historical age of {refLabel} medalists in {event} · amber lines = RF athletes' current age
+            {medalistAges.length > 0
+              ? `Based on ${medalistAges.length} historical ${refLabel} medalists in ${event} · mean ${bellMean?.toFixed(1)} yrs · σ ${bellStd?.toFixed(1)} yrs`
+              : `No historical medalist data for ${event} (${refLabel})`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {bellCurveData.length === 0 ? (
-            <div className="h-[220px] flex items-center justify-center text-muted-foreground text-sm">
-              No historical medalist data for {event} ({refLabel})
+            <div className="h-[240px] flex items-center justify-center text-muted-foreground text-sm">
+              Not enough historical data to plot distribution for {event} ({refLabel})
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart
                 data={bellCurveData}
-                margin={{ top: 24, right: 20, bottom: 20, left: 0 }}
+                margin={{ top: 20, right: 24, bottom: 24, left: 0 }}
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <defs>
+                  <linearGradient id="bellFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.4} />
                 <XAxis
                   dataKey="age"
+                  type="number"
+                  domain={["dataMin", "dataMax"]}
+                  tickCount={10}
+                  tickFormatter={(v) => Math.round(v).toString()}
                   tick={{ fontSize: 11 }}
-                  label={{ value: "Age", position: "insideBottom", offset: -10, fontSize: 11 }}
+                  label={{ value: "Age", position: "insideBottom", offset: -12, fontSize: 11 }}
                 />
-                <YAxis
-                  allowDecimals={false}
-                  tick={{ fontSize: 11 }}
-                  width={28}
-                />
+                <YAxis hide />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
-                    const d = payload[0].payload;
+                    const age = payload[0].payload.age as number;
+                    const nearby = rfAgesForBell.filter(rf => Math.abs(rf.age - age) < 0.4);
                     return (
-                      <div className="bg-card border border-border rounded-lg p-2 shadow-lg text-xs">
-                        <p>Age {d.age}: <span className="font-bold">{d.count} medalist{d.count !== 1 ? "s" : ""}</span></p>
+                      <div className="bg-card border border-border rounded-lg p-2 shadow-lg text-xs space-y-0.5">
+                        {nearby.length > 0 ? (
+                          nearby.map(rf => (
+                            <p key={rf.name} className="text-amber-500 font-semibold">
+                              {rf.name} · age {rf.age}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground">Age {age.toFixed(1)}</p>
+                        )}
                       </div>
                     );
                   }}
                 />
-                <Bar dataKey="count" fill="#94a3b8" radius={[3, 3, 0, 0]} barSize={20} />
+                <Area
+                  type="monotone"
+                  dataKey="density"
+                  stroke="#6366f1"
+                  strokeWidth={2}
+                  fill="url(#bellFill)"
+                  dot={false}
+                  activeDot={false}
+                />
+                {/* Mean line */}
+                {bellMean !== null && (
+                  <ReferenceLine
+                    x={bellMean}
+                    stroke="#6366f1"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    label={{ value: `μ ${bellMean.toFixed(1)}`, position: "insideTopLeft", fontSize: 9, fill: "#6366f1" }}
+                  />
+                )}
+                {/* RF athlete age lines — labels staggered vertically so they don't overlap */}
                 {rfAgesForBell.map((rf, i) => (
                   <ReferenceLine
                     key={rf.name}
                     x={rf.age}
                     stroke="#f59e0b"
                     strokeWidth={2}
-                    strokeDasharray="4 2"
-                    label={{
-                      value: rf.name.split(" ")[0],
-                      position: i % 2 === 0 ? "insideTopRight" : "insideTopLeft",
-                      fontSize: 9,
-                      fill: "#f59e0b",
+                    label={(props: any) => {
+                      const { viewBox } = props;
+                      const x = viewBox.x;
+                      const y = viewBox.y + 8 + (i % 5) * 16;
+                      return (
+                        <text x={x + 3} y={y} fill="#f59e0b" fontSize={9} fontWeight={500}>
+                          {rf.name.split(" ")[0]}
+                        </text>
+                      );
                     }}
                   />
                 ))}
-              </BarChart>
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </CardContent>
