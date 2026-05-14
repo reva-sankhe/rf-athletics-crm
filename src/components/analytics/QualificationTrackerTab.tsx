@@ -4,22 +4,40 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { fetchWAQualificationStandards, fetchWARFAthleteResults, fetchWAAthleteProfiles } from "@/lib/queries";
-import type { WAQualificationStandard, WARFAthleteResult, WAAthleteProfile } from "@/lib/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  fetchWAQualificationStandards,
+  fetchWARFAthleteResults,
+  fetchWAAthleteProfiles,
+  fetchAllMainAthleteEvents,
+  fetchAllRFAthletePBs,
+} from "@/lib/queries";
+import type {
+  WAQualificationStandard,
+  WARFAthleteResult,
+  WAAthleteProfile,
+  AthleteEvent,
+  WAAthletePersonalBest,
+} from "@/lib/types";
 import { normalizeEventName, classifyEvent } from "@/lib/eventUtils";
+import { isEventMatch } from "@/lib/eventUtils";
 import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Cell,
   LabelList,
 } from "recharts";
-import { CheckCircle2, AlertCircle, BarChart2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, BarChart2, Info } from "lucide-react";
 
 // All events with standards in the DB
 const QUAL_EVENTS = [
@@ -106,8 +124,10 @@ interface QualRow {
   gender: string;
   event: string;
   bestMark: string;
-  markNum: number;          // absolute numeric value for charting
+  markNum: number;          // absolute numeric value for charting (2026 season best)
   bestScore: number;
+  pbMark: string | null;    // all-time personal best mark string
+  pbNum: number | null;     // all-time personal best numeric value
   agStandard: string | null;
   agStdNum: number | null;  // parsed numeric standard
   agGap: number | null;
@@ -151,72 +171,130 @@ export function QualificationTrackerTab() {
   });
   const { data: athletes = [], isLoading: athletesLoading } = useQuery<WAAthleteProfile[]>({
     queryKey: ["athletes"],
-    queryFn: fetchWAAthleteProfiles,
+    queryFn: () => fetchWAAthleteProfiles(),
   });
-  const loading = stdsLoading || resultsLoading || athletesLoading;
+  const { data: mainEvents = [], isLoading: mainEventsLoading } = useQuery<AthleteEvent[]>({
+    queryKey: ["main-athlete-events"],
+    queryFn: fetchAllMainAthleteEvents,
+  });
+  const { data: allPBs = [], isLoading: pbsLoading } = useQuery<WAAthletePersonalBest[]>({
+    queryKey: ["all-athlete-pbs"],
+    queryFn: fetchAllRFAthletePBs,
+  });
+
+  const loading = stdsLoading || resultsLoading || athletesLoading || mainEventsLoading || pbsLoading;
   const standards = useMemo(() => rawStandards.filter(s => s.year === 2026), [rawStandards]);
+
+  // Build a map: aa_athlete_id → normalized main event name (stripped of gender prefix)
+  const mainEventMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of mainEvents) {
+      map.set(e.aa_athlete_id, normDisc(e.event_name));
+    }
+    return map;
+  }, [mainEvents]);
+
+  // Build a map: aa_athlete_id → raw main event_name (for PB matching via isEventMatch)
+  const mainEventRawMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of mainEvents) {
+      map.set(e.aa_athlete_id, e.event_name);
+    }
+    return map;
+  }, [mainEvents]);
+
+  // Build a map: aa_athlete_id → best PB for main event
+  const pbMap = useMemo(() => {
+    const map = new Map<string, WAAthletePersonalBest>();
+    for (const pb of allPBs) {
+      if (!pb.discipline || !pb.mark) continue;
+      const rawMainEvent = mainEventRawMap.get(pb.aa_athlete_id);
+      if (!rawMainEvent) continue;
+      if (!isEventMatch(pb.discipline, rawMainEvent)) continue;
+      // Keep the entry (first match per athlete — PBs table typically has one row per discipline)
+      if (!map.has(pb.aa_athlete_id)) {
+        map.set(pb.aa_athlete_id, pb);
+      }
+    }
+    return map;
+  }, [allPBs, mainEventRawMap]);
 
   const [filterEvent, setFilterEvent] = useState("all");
   const [filterGender, setFilterGender] = useState("all");
 
-  const rows: QualRow[] = athletes.flatMap(athlete => {
+  const rows: QualRow[] = athletes.flatMap((athlete: WAAthleteProfile) => {
     const gender = athlete.gender || "M";
-    return QUAL_EVENTS.flatMap(event => {
-      const eventNorm = normDisc(event);
-      const athResults = results.filter(
-        r => r.aa_athlete_id === athlete.aa_athlete_id &&
-          !r.not_legal &&
-          normDisc(r.discipline) === eventNorm
-      );
-      if (athResults.length === 0) return [];
 
-      const best = athResults.reduce((b, r) => r.result_score > b.result_score ? r : b);
-      const agStd = standards.find(s => s.competition === "Asian Games" && s.event === event && s.gender === gender);
-      const cwgStd = standards.find(s => s.competition === "Commonwealth Games" && s.event === event && s.gender === gender);
+    // Only process the athlete's single main event
+    const mainEventNorm = mainEventMap.get(athlete.aa_athlete_id);
+    if (!mainEventNorm) return [];
 
-      const markNum = parseMarkNum(best.mark, event);
-      if (markNum === null) return [];
+    // Find the matching QUAL_EVENTS entry (needed for standards lookup by exact label)
+    const event = QUAL_EVENTS.find(e => normDisc(e) === mainEventNorm);
+    if (!event) return [];
 
-      const agStdNum = agStd ? parseMarkNum(agStd.standard, event) : null;
-      const cwgStdNum = cwgStd ? parseMarkNum(cwgStd.standard, event) : null;
+    const athResults = results.filter(
+      (r: WARFAthleteResult) => r.aa_athlete_id === athlete.aa_athlete_id &&
+        !r.not_legal &&
+        normDisc(r.discipline) === mainEventNorm
+    );
+    if (athResults.length === 0) return [];
 
-      const agGap = agStdNum !== null
-        ? parseFloat(calcGap(markNum, agStdNum, event).toFixed(2))
-        : null;
-      const cwgGap = cwgStdNum !== null
-        ? parseFloat(calcGap(markNum, cwgStdNum, event).toFixed(2))
-        : null;
+    const best = athResults.reduce((b: WARFAthleteResult, r: WARFAthleteResult) =>
+      r.result_score > b.result_score ? r : b
+    );
+    const agStd = standards.find(s => s.competition === "Asian Games" && s.event === event && s.gender === gender);
+    const cwgStd = standards.find(s => s.competition === "Commonwealth Games" && s.event === event && s.gender === gender);
 
-      const qualAG = agGap !== null && agGap < 0;
-      const qualCWG = cwgGap !== null && cwgGap < 0;
-      const closeAG = !qualAG && agGap !== null && agGap < 2;
-      const closeCWG = !qualCWG && cwgGap !== null && cwgGap < 2;
+    const markNum = parseMarkNum(best.mark, event);
+    if (markNum === null) return [];
 
-      const status: Status =
-        qualAG && qualCWG ? "both" :
-        qualAG ? "qualified_ag" :
-        qualCWG ? "qualified_cwg" :
-        closeAG ? "close_ag" :
-        closeCWG ? "close_cwg" :
-        "in_progress";
+    // Personal best (all-time)
+    const pbEntry = pbMap.get(athlete.aa_athlete_id);
+    const pbMark = pbEntry?.mark ?? null;
+    const pbNum = pbMark ? parseMarkNum(pbMark, event) : null;
 
-      return [{
-        athleteId: athlete.aa_athlete_id,
-        athleteName: athlete.reliance_name,
-        gender,
-        event,
-        bestMark: best.mark,
-        markNum,
-        bestScore: best.result_score,
-        agStandard: agStd?.standard ?? null,
-        agStdNum: agStdNum ?? null,
-        agGap,
-        cwgStandard: cwgStd?.standard ?? null,
-        cwgStdNum: cwgStdNum ?? null,
-        cwgGap,
-        status,
-      }];
-    });
+    const agStdNum = agStd ? parseMarkNum(agStd.standard, event) : null;
+    const cwgStdNum = cwgStd ? parseMarkNum(cwgStd.standard, event) : null;
+
+    const agGap = agStdNum !== null
+      ? parseFloat(calcGap(markNum, agStdNum, event).toFixed(2))
+      : null;
+    const cwgGap = cwgStdNum !== null
+      ? parseFloat(calcGap(markNum, cwgStdNum, event).toFixed(2))
+      : null;
+
+    const qualAG = agGap !== null && agGap < 0;
+    const qualCWG = cwgGap !== null && cwgGap < 0;
+    const closeAG = !qualAG && agGap !== null && agGap < 2;
+    const closeCWG = !qualCWG && cwgGap !== null && cwgGap < 2;
+
+    const status: Status =
+      qualAG && qualCWG ? "both" :
+      qualAG ? "qualified_ag" :
+      qualCWG ? "qualified_cwg" :
+      closeAG ? "close_ag" :
+      closeCWG ? "close_cwg" :
+      "in_progress";
+
+    return [{
+      athleteId: athlete.aa_athlete_id,
+      athleteName: athlete.reliance_name,
+      gender,
+      event,
+      bestMark: best.mark,
+      markNum,
+      bestScore: best.result_score,
+      pbMark,
+      pbNum: pbNum ?? null,
+      agStandard: agStd?.standard ?? null,
+      agStdNum: agStdNum ?? null,
+      agGap,
+      cwgStandard: cwgStd?.standard ?? null,
+      cwgStdNum: cwgStdNum ?? null,
+      cwgGap,
+      status,
+    }];
   });
 
   // Table respects both filters
@@ -251,9 +329,10 @@ export function QualificationTrackerTab() {
   const refCwgStdNum = chartRows.find(r => r.cwgStdNum !== null)?.cwgStdNum ?? null;
   const refCwgStdLabel = chartRows.find(r => r.cwgStandard !== null)?.cwgStandard ?? null;
 
-  // X-axis domain — include the standards so reference lines always sit inside the chart
+  // X-axis domain — include standards AND PB values so all markers sit inside the chart
   const allNums = [
     ...chartRows.map(r => r.markNum),
+    ...chartRows.filter(r => r.pbNum !== null).map(r => r.pbNum as number),
     ...(refAgStdNum !== null ? [refAgStdNum] : []),
     ...(refCwgStdNum !== null ? [refCwgStdNum] : []),
   ].filter(v => isFinite(v) && v > 0);
@@ -273,6 +352,7 @@ export function QualificationTrackerTab() {
   const chartHeight = Math.max(220, chartRows.length * 40 + 48);
 
   return (
+    <TooltipProvider>
     <div className="space-y-4">
       {/* Summary cards — reflect current filters */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -331,7 +411,7 @@ export function QualificationTrackerTab() {
                 Gap to Standard{filterEvent !== "all" ? ` — ${filterEvent}` : ""}
               </CardTitle>
               <CardDescription className="mt-1">
-                Athlete best mark vs. qualifying standard · dashed lines = AG (green) / CWG (indigo)
+                Coloured bar = 2026 season best · <span className="text-violet-600 font-medium">◆ violet marker</span> = all-time PB · dashed lines = AG (green) / CWG (indigo)
               </CardDescription>
             </div>
 
@@ -371,9 +451,9 @@ export function QualificationTrackerTab() {
             </div>
           </div>
 
-          {/* Standards legend — shown only when an event is selected and standards exist */}
-          {filterEvent !== "all" && (refAgStdNum !== null || refCwgStdNum !== null) && (
-            <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+          {/* Standards + PB legend — shown only when an event is selected */}
+          {filterEvent !== "all" && (
+            <div className="flex flex-wrap gap-4 mt-2 text-xs text-muted-foreground">
               {refAgStdNum !== null && (
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-5 border-t-2 border-dashed border-emerald-500" />
@@ -388,6 +468,13 @@ export function QualificationTrackerTab() {
                   &nbsp;{refCwgStdLabel}
                 </span>
               )}
+              <span className="flex items-center gap-1.5">
+                <svg width="14" height="14" viewBox="0 0 14 14">
+                  <line x1="7" y1="1" x2="7" y2="13" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" />
+                  <polygon points="7,3 11,7 7,11 3,7" fill="#7c3aed" />
+                </svg>
+                <span className="text-violet-600 font-medium">All-time PB</span>
+              </span>
             </div>
           )}
         </CardHeader>
@@ -441,7 +528,7 @@ export function QualificationTrackerTab() {
                     );
                   }}
                 />
-                <Tooltip
+                <RechartsTooltip
                   cursor={{ fill: "rgba(0,0,0,0.04)" }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
@@ -449,7 +536,16 @@ export function QualificationTrackerTab() {
                     return (
                       <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm space-y-1">
                         <p className="font-semibold">{d.athleteName}</p>
-                        <p>Best mark: <strong className="font-mono">{d.bestMark}</strong></p>
+                        <p>
+                          <span className="text-muted-foreground">2026 best:</span>{" "}
+                          <strong className="font-mono">{d.bestMark}</strong>
+                        </p>
+                        {d.pbMark && (
+                          <p>
+                            <span className="text-violet-600 font-medium">All-time PB:</span>{" "}
+                            <strong className="font-mono">{d.pbMark}</strong>
+                          </p>
+                        )}
                         {d.agStandard && (
                           <p>
                             AG std: <strong className="font-mono">{d.agStandard}</strong>
@@ -476,10 +572,70 @@ export function QualificationTrackerTab() {
                   }}
                 />
 
-                <Bar dataKey="markNum" radius={[0, 4, 4, 0]} maxBarSize={24}>
-                  {chartRows.map((row, i) => (
-                    <Cell key={`cell-${i}`} fill={barColor(row.status)} />
-                  ))}
+                {/*
+                  Single bar: 2026 season best (coloured rect) + PB diamond marker (violet tick)
+                  Both rendered in the same row via a single custom shape using xDomain closure.
+                */}
+                <Bar
+                  dataKey="markNum"
+                  maxBarSize={24}
+                  shape={(props: any) => {
+                    const { x, y, width, height, background, payload } = props;
+                    if (!width || !height || !isFinite(width) || !isFinite(height)) return <g />;
+
+                    const status: Status = payload?.status ?? "in_progress";
+                    const pbNum: number | null = payload?.pbNum ?? null;
+
+                    const cy = y + height / 2;
+                    const half = Math.max(2, height / 2 - 2);
+                    const dw = 4;
+
+                    // Compute PB pixel x using the full background width and xDomain closure
+                    let pbX: number | null = null;
+                    if (
+                      pbNum !== null &&
+                      isFinite(pbNum) &&
+                      background &&
+                      isFinite(background.width) &&
+                      background.width > 0 &&
+                      xDomain[1] > xDomain[0]
+                    ) {
+                      const fraction = (pbNum - xDomain[0]) / (xDomain[1] - xDomain[0]);
+                      pbX = background.x + fraction * background.width;
+                    }
+
+                    return (
+                      <g>
+                        {/* Coloured season-best bar */}
+                        <rect
+                          x={x}
+                          y={y + 2}
+                          width={Math.max(0, width)}
+                          height={Math.max(0, height - 4)}
+                          fill={barColor(status)}
+                          rx={3}
+                          ry={3}
+                        />
+                        {/* Violet PB diamond marker on the same row */}
+                        {pbX !== null && (
+                          <g>
+                            <line
+                              x1={pbX} y1={cy - half}
+                              x2={pbX} y2={cy + half}
+                              stroke="#7c3aed"
+                              strokeWidth={2.5}
+                              strokeLinecap="round"
+                            />
+                            <polygon
+                              points={`${pbX},${cy - dw} ${pbX + dw},${cy} ${pbX},${cy + dw} ${pbX - dw},${cy}`}
+                              fill="#7c3aed"
+                            />
+                          </g>
+                        )}
+                      </g>
+                    );
+                  }}
+                >
                   <LabelList
                     dataKey="bestMark"
                     position="right"
@@ -529,7 +685,9 @@ export function QualificationTrackerTab() {
       <Card>
         <CardHeader>
           <CardTitle>All Athletes × Events</CardTitle>
-              <CardDescription>Complete qualification tracker · 2026 results only · green = reached Q standard · amber = close to AG-Q · orange = close to CWG-Q</CardDescription>
+          <CardDescription>
+            Complete qualification tracker · 2026 results only · green = reached Q standard · amber = close to AG-Q · orange = close to CWG-Q
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -538,7 +696,20 @@ export function QualificationTrackerTab() {
                 <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="text-left p-2">Athlete</th>
                   <th className="text-left p-2">Event</th>
-                  <th className="text-right p-2">Best Mark</th>
+                  <th className="text-right p-2">
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      Best Mark
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 cursor-help opacity-60 hover:opacity-100 transition-opacity" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs max-w-[180px] text-center">
+                          Best result from the 2026 competition season
+                        </TooltipContent>
+                      </Tooltip>
+                    </span>
+                  </th>
+                  <th className="text-right p-2">All-time PB</th>
                   <th className="text-right p-2">AG Std</th>
                   <th className="text-right p-2">AG Gap</th>
                   <th className="text-right p-2">CWG Std</th>
@@ -563,6 +734,9 @@ export function QualificationTrackerTab() {
                         <Badge variant="outline" className="text-xs">{r.event}</Badge>
                       </td>
                       <td className="p-2 text-right font-mono">{r.bestMark}</td>
+                      <td className="p-2 text-right font-mono text-violet-600 font-semibold">
+                        {r.pbMark ?? "—"}
+                      </td>
                       <td className="p-2 text-right font-mono text-muted-foreground">{r.agStandard ?? "—"}</td>
                       <td className={`p-2 text-right font-semibold ${r.agGap === null ? "text-muted-foreground" : r.agGap < 0 ? "text-emerald-600" : "text-amber-600"}`}>
                         {r.agGap !== null ? `${r.agGap > 0 ? "+" : ""}${r.agGap}%` : "—"}
@@ -577,7 +751,7 @@ export function QualificationTrackerTab() {
                 })}
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-muted-foreground">No data for selected filters</td>
+                    <td colSpan={9} className="p-8 text-center text-muted-foreground">No data for selected filters</td>
                   </tr>
                 )}
               </tbody>
@@ -586,5 +760,6 @@ export function QualificationTrackerTab() {
         </CardContent>
       </Card>
     </div>
+    </TooltipProvider>
   );
 }

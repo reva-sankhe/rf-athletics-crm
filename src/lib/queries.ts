@@ -120,6 +120,25 @@ export async function fetchAthleteEvents(athleteId: string): Promise<AthleteEven
   return data as AthleteEvent[];
 }
 
+// Fetch all athletes' main events in one bulk query
+export async function fetchAllMainAthleteEvents(): Promise<AthleteEvent[]> {
+  const { data, error } = await supabase
+    .from("athlete_events")
+    .select("*")
+    .eq("is_main_event", true);
+  if (error) throw error;
+  return data as AthleteEvent[];
+}
+
+// Fetch all RF athlete personal bests in one bulk query
+export async function fetchAllRFAthletePBs(): Promise<WAAthletePersonalBest[]> {
+  const { data, error } = await supabase
+    .from("wa_athlete_pbs")
+    .select("*");
+  if (error) throw error;
+  return data as WAAthletePersonalBest[];
+}
+
 // Fetch personal bests matched to athlete's specific events
 export async function fetchPersonalBestsForAthleteEvents(
   athleteId: string

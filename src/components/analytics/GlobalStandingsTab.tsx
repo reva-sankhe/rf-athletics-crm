@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchWAToplists, fetchWAAthleteProfiles, fetchEventBenchmark } from "@/lib/queries";
 import type { WAToplist, WAAthleteProfile, EventBenchmark } from "@/lib/types";
 import { TOPLIST_DISCIPLINE_GROUPS } from "@/lib/eventGroups";
@@ -12,13 +13,14 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   Cell,
   LabelList,
   ReferenceLine,
+  type TooltipProps,
 } from "recharts";
-import { Medal } from "lucide-react";
+import { Medal, Info } from "lucide-react";
 import { classifyEvent } from "@/lib/eventUtils";
 import type { PerformanceDirection } from "@/lib/eventUtils";
 
@@ -93,7 +95,7 @@ export function GlobalStandingsTab() {
   });
   const { data: rfAthletes = [] } = useQuery<WAAthleteProfile[]>({
     queryKey: ["athletes"],
-    queryFn: fetchWAAthleteProfiles,
+    queryFn: () => fetchWAAthleteProfiles(),
   });
   const { data: benchmark = null } = useQuery<EventBenchmark | null>({
     queryKey: ["benchmark", selectedEvent],
@@ -207,6 +209,36 @@ export function GlobalStandingsTab() {
 
   const chartHeight = Math.max(200, barChartData.length * 46 + 60);
 
+  // Detect when AG and CWG labels would visually overlap (within ~15% of domain width)
+  const domainWidth = xDomain[1] - xDomain[0] || 1;
+  const labelsOverlap =
+    agStdNum !== null && isFinite(agStdNum) &&
+    cwgStdNum !== null && isFinite(cwgStdNum) &&
+    Math.abs(agStdNum - cwgStdNum) / domainWidth < 0.15;
+
+  // When labels overlap we need a taller top margin to fit two stacked rows
+  const chartTopMargin = labelsOverlap ? 32 : 22;
+
+  const renderBarTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload as BarEntry;
+    return (
+      <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
+        <p className="font-semibold">{d.name}</p>
+        <p className="text-muted-foreground text-xs">
+          {d.nationality}{d.section === "rf" ? ` · Global rank #${d.rank}` : ""}
+        </p>
+        <p>Mark: <strong className="font-mono">{d.mark}</strong></p>
+        {d.score && <p>WA Score: <strong>{d.score}</strong></p>}
+        {d.isRF && (
+          <Badge className="mt-1 text-xs" style={{ background: RF_COLOR, color: "white" }}>
+            RF Athlete
+          </Badge>
+        )}
+      </div>
+    );
+  };
+
   // Summary stats — use the full mark-sorted list so RF athletes ranked outside top-25 are not missed
   const rfInAll = sortedByMark.filter(d => isRF(d.athlete_name));
   const bestRF = rfInAll.length > 0 ? rfInAll[0] : null;
@@ -232,51 +264,90 @@ export function GlobalStandingsTab() {
   return (
     <div className="space-y-3">
 
-      {/* Summary cards — compact single-row strip */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="py-0">
-          <CardContent className="flex items-center gap-3 px-4 py-3">
-            <Medal className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground leading-none mb-0.5">Best RF Position</p>
+      {/* Summary cards */}
+      <TooltipProvider delayDuration={200}>
+        <div className="grid grid-cols-3 gap-3">
+
+          {/* Best RF Position */}
+          <Card className="py-0">
+            <CardContent className="px-5 py-5">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Medal className="h-5 w-5 text-blue-500 shrink-0" />
+                  <p className="text-sm font-medium text-muted-foreground">Best RF Position</p>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0">
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[220px] text-center leading-snug">
+                    The highest World Athletics ranking held by any RF athlete in the selected event and region scope.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               {bestRF ? (
-                <p className="text-lg font-bold text-blue-600 leading-none">
-                  #{bestRFRank}
-                  <span className="text-xs font-normal text-muted-foreground ml-1.5 truncate">{bestRF.athlete_name} · {bestRF.mark}</span>
-                </p>
+                <>
+                  <p className="text-3xl font-bold text-blue-600 leading-none mb-1">#{bestRFRank}</p>
+                  <p className="text-sm text-muted-foreground truncate">{bestRF.athlete_name} · <span className="font-mono font-semibold">{bestRF.mark}</span></p>
+                </>
               ) : (
-                <p className="text-xs text-muted-foreground">No RF athletes ranked</p>
+                <p className="text-sm text-muted-foreground">No RF athletes ranked</p>
               )}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="py-0">
-          <CardContent className="flex items-center gap-3 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground leading-none mb-0.5">RF Athletes Ranked</p>
-              <p className="text-lg font-bold leading-none">
-                {rfInAll.length}
-                <span className="text-xs font-normal text-muted-foreground ml-1.5">of {sortedByMark.length}</span>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="py-0">
-          <CardContent className="flex items-center gap-3 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground leading-none mb-0.5">Score Gap to Leader</p>
+            </CardContent>
+          </Card>
+
+          {/* RF Athletes Ranked */}
+          <Card className="py-0">
+            <CardContent className="px-5 py-5">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <p className="text-sm font-medium text-muted-foreground">RF Athletes Ranked</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0">
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[220px] text-center leading-snug">
+                    How many RF athletes appear in the World Athletics toplist for this event and region, out of all athletes ranked.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-3xl font-bold leading-none mb-1">{rfInAll.length}</p>
+              <p className="text-sm text-muted-foreground">of {sortedByMark.length} athletes ranked</p>
+            </CardContent>
+          </Card>
+
+          {/* Score Gap to Leader */}
+          <Card className="py-0">
+            <CardContent className="px-5 py-5">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <p className="text-sm font-medium text-muted-foreground">Score Gap to Leader</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0">
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px] text-center leading-snug">
+                    Difference in World Athletics scoring points between the #1 ranked athlete and the best-ranked RF athlete. A smaller gap means RF is closer to the world leader.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               {rfScoreGap !== null ? (
                 <p className="text-lg font-bold text-amber-500 leading-none">
                   {rfScoreGap}%
                   <span className="text-xs font-normal text-muted-foreground ml-1.5">behind #1</span>
                 </p>
               ) : (
-                <p className="text-xs text-muted-foreground">—</p>
+                <p className="text-sm text-muted-foreground">—</p>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+
+        </div>
+      </TooltipProvider>
 
       {/* ── Horizontal Bar Chart ── */}
       <Card>
@@ -356,7 +427,7 @@ export function GlobalStandingsTab() {
                 <BarChart
                   data={barChartData}
                   layout="vertical"
-                  margin={{ top: 2, right: 90, left: 8, bottom: 4 }}
+                  margin={{ top: chartTopMargin, right: 90, left: 8, bottom: 4 }}
                 >
                   <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                   <XAxis
@@ -393,27 +464,9 @@ export function GlobalStandingsTab() {
                       );
                     }}
                   />
-                  <Tooltip
+                  <RechartsTooltip
                     cursor={{ fill: "rgba(0,0,0,0.04)" }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const d = payload[0].payload as BarEntry;
-                      return (
-                        <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm">
-                          <p className="font-semibold">{d.name}</p>
-                          <p className="text-muted-foreground text-xs">
-                            {d.nationality}{d.section === "rf" ? ` · Global rank #${d.rank}` : ""}
-                          </p>
-                          <p>Mark: <strong className="font-mono">{d.mark}</strong></p>
-                          {d.score && <p>WA Score: <strong>{d.score}</strong></p>}
-                          {d.isRF && (
-                            <Badge className="mt-1 text-xs" style={{ background: RF_COLOR, color: "white" }}>
-                              RF Athlete
-                            </Badge>
-                          )}
-                        </div>
-                      );
-                    }}
+                    content={renderBarTooltip}
                   />
                   <Bar dataKey="markNum" radius={[0, 4, 4, 0]} maxBarSize={24}>
                     {barChartData.map((entry, index) => (
@@ -436,12 +489,16 @@ export function GlobalStandingsTab() {
                       stroke="#10b981"
                       strokeWidth={2}
                       strokeDasharray="5 3"
-                      label={{
-                        value: `AG (${benchmark?.asian_games_qual_standard})`,
-                        position: "insideTopLeft",
-                        fill: "#10b981",
-                        fontSize: 10,
-                        fontWeight: 600,
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      label={(props: any) => {
+                        const vb = props.viewBox ?? {};
+                        // When labels overlap, AG sits in the lower row (closer to bars)
+                        const labelY = (vb.y ?? chartTopMargin) - 6;
+                        return (
+                          <text x={(vb.x ?? 0) + 4} y={labelY} fontSize={10} fill="#10b981" fontWeight={600}>
+                            AG ({benchmark?.asian_games_qual_standard})
+                          </text>
+                        );
                       }}
                     />
                   )}
@@ -453,12 +510,32 @@ export function GlobalStandingsTab() {
                       stroke="#6366f1"
                       strokeWidth={2}
                       strokeDasharray="5 3"
-                      label={{
-                        value: `CWG (${benchmark?.commonwealth_games_qual_standard})`,
-                        position: "insideTopRight",
-                        fill: "#6366f1",
-                        fontSize: 10,
-                        fontWeight: 600,
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      label={(props: any) => {
+                        const vb = props.viewBox ?? {};
+                        const plotTop = vb.y ?? chartTopMargin;
+                        // When labels overlap, CWG sits in the upper row (12px higher)
+                        const labelY = plotTop - (labelsOverlap ? 18 : 6);
+                        const lineX = vb.x ?? 0;
+                        return (
+                          <g>
+                            <text x={lineX + 4} y={labelY} fontSize={10} fill="#6366f1" fontWeight={600}>
+                              CWG ({benchmark?.commonwealth_games_qual_standard})
+                            </text>
+                            {/* Extend the dotted line up to the label when staggered */}
+                            {labelsOverlap && (
+                              <line
+                                x1={lineX}
+                                y1={labelY + 2}
+                                x2={lineX}
+                                y2={plotTop}
+                                stroke="#6366f1"
+                                strokeWidth={2}
+                                strokeDasharray="5 3"
+                              />
+                            )}
+                          </g>
+                        );
                       }}
                     />
                   )}
@@ -469,6 +546,25 @@ export function GlobalStandingsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Data & Methodology Note ── */}
+      <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground space-y-1.5">
+        <p className="font-semibold text-foreground/70 text-xs uppercase tracking-wide">About this chart</p>
+        <ul className="space-y-1 list-none">
+          <li>
+            <span className="font-medium text-foreground/80">Data source:</span>{" "}
+            World Athletics annual toplists for <strong>2024 and 2025</strong>. Where an athlete appears in both seasons, only their <strong>best performance</strong> is used.
+          </li>
+          <li>
+            <span className="font-medium text-foreground/80">Chart rows:</span>{" "}
+            Shows the <strong>world-ranked #1, #2, #3, #5, and #10</strong> athletes as context benchmarks (amber), plus <strong>all RF athletes</strong> found in the toplist for the selected event (green). RF athletes already inside the top-10 appear only once in the top section.
+          </li>
+          <li>
+            <span className="font-medium text-foreground/80">Rankings scope:</span>{" "}
+            World Athletics maintains three separate ranked lists per event — <strong>Global</strong> (all nations), <strong>Asia</strong> (Asia-region only), and <strong>India</strong> (Indian athletes only). The region filter switches between these three scopes, and all rank numbers reflect the selected scope.
+          </li>
+        </ul>
+      </div>
 
     </div>
   );

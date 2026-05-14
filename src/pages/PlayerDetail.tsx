@@ -1,14 +1,19 @@
 import { useState, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents, fetchAthleteRankings, fetchRankingsByEventGroups, fetchWARFAthleteResults, uploadAthletePhoto, deleteAthletePhoto } from "@/lib/queries";
+import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents, fetchAthleteRankings, fetchRankingsByEventGroups, fetchWARFAthleteResults, fetchWAToplists, uploadAthletePhoto, deleteAthletePhoto } from "@/lib/queries";
 import { AthleteTrendCard } from "@/components/analytics/AthleteTrendCard";
 import { Skeleton } from "@/components/Skeleton";
-import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking, WARFAthleteResult } from "@/lib/types";
+import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking, WARFAthleteResult, WAToplist } from "@/lib/types";
 import { isEventMatch, classifyEvent } from "@/lib/eventUtils";
-import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart, Upload, Trash2 } from "lucide-react";
+import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart, Upload, Trash2, Download, Loader2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import {
+  CartesianGrid, Line, LineChart as RechartsLineChart,
+  XAxis, YAxis, ResponsiveContainer, Tooltip, Legend,
+} from "recharts";
+import { pdf } from "@react-pdf/renderer";
+import { AthleteReportPDF } from "@/components/AthleteReportPDF";
 
 function stripGender(s: string | null | undefined): string {
   if (!s) return "—";
@@ -50,12 +55,14 @@ export default function AthleteDetail() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [trendDiscipline, setTrendDiscipline] = useState<string>("");
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   const { data: athlete, isLoading: profileLoading } = useQuery<WAAthleteProfile | null>({
     queryKey: ["athlete", id],
     queryFn: () => fetchWAAthleteProfile(id!),
     enabled: !!id,
   });
+
   const { data: rankings = [] } = useQuery<WARanking[]>({
     queryKey: ["athlete-rankings", athlete?.reliance_name],
     queryFn: () => fetchAthleteRankings(athlete!.reliance_name!),
@@ -71,25 +78,44 @@ export default function AthleteDetail() {
     queryFn: () => fetchAthleteEvents(id!),
     enabled: !!id,
   });
+
   const { data: matchedPersonalBests = [] } = useQuery<PersonalBestWithEvent[]>({
     queryKey: ["athlete-pbs-matched", id],
     queryFn: () => fetchPersonalBestsForAthleteEvents(id!),
     enabled: !!id,
   });
+
   const { data: personalBests = [] } = useQuery<WAAthletePersonalBest[]>({
     queryKey: ["athlete-pbs", id],
     queryFn: () => fetchWAAthletePersonalBests(id!),
     enabled: !!id,
   });
+
   const { data: honours = [] } = useQuery<WAAthleteHonour[]>({
     queryKey: ["athlete-honours", id],
     queryFn: () => fetchWAAthleteHonours(id!),
     enabled: !!id,
   });
+
   const { data: rawResults = [], isLoading: resultsLoading } = useQuery<WARFAthleteResult[]>({
     queryKey: ["athlete-rf-results", id],
     queryFn: () => fetchWARFAthleteResults(id!, 200),
     enabled: !!id,
+  });
+
+  // Fetch toplists for key competitors in the PDF report
+  const { data: toplists = [] } = useQuery<WAToplist[]>({
+    queryKey: ["toplists-for-athlete", athlete?.reliance_events, athlete?.gender],
+    queryFn: async () => {
+      if (!athlete?.reliance_events) return [];
+      const evs = athlete.reliance_events.split(",").map(e => e.trim()).filter(Boolean);
+      const gender = athlete.gender === "M" ? "M" : athlete.gender === "F" ? "W" : undefined;
+      const results = await Promise.all(
+        evs.map(ev => fetchWAToplists(ev, gender, 50))
+      );
+      return results.flat();
+    },
+    enabled: !!athlete,
   });
 
   const competitionResults = rawResults
@@ -97,6 +123,35 @@ export default function AthleteDetail() {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const loading = profileLoading || resultsLoading;
+
+  // ── Download Report handler ────────────────────────────────────────────────
+  const handleDownloadReport = async () => {
+    if (!athlete) return;
+    setDownloadingReport(true);
+    try {
+      const blob = await pdf(
+        <AthleteReportPDF
+          athlete={athlete}
+          rankings={rankings}
+          personalBests={personalBests}
+          honours={honours}
+          results={rawResults}
+          toplists={toplists}
+        />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safeName = (athlete.reliance_name || "athlete").replace(/\s+/g, "_");
+      a.href = url;
+      a.download = `${safeName}_Report_${new Date().toISOString().slice(0, 7)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to generate report:", err);
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
 
   if (loading || !athlete) {
     return (
@@ -107,88 +162,51 @@ export default function AthleteDetail() {
     );
   }
 
-  const events = athlete.reliance_events 
-    ? athlete.reliance_events.split(',').map(e => e.trim())
+  const events = athlete.reliance_events
+    ? athlete.reliance_events.split(",").map(e => e.trim())
     : [];
 
-  // Normalize function to handle format differences (e.g., "110m" vs "110 Metres")
-  const normalize = (str: string) => {
-    return str
+  // Normalize event names for matching
+  const normalize = (str: string) =>
+    str
       .toLowerCase()
-      .replace(/men's\s*/gi, '')  // Remove "Men's"
-      .replace(/women's\s*/gi, '') // Remove "Women's"
-      .replace(/\s*metres?\s*/gi, 'm')  // Convert "Metres"/"Metre" to "m"
-      .replace(/\s+/g, '')  // Remove spaces
+      .replace(/men's\s*/gi, "")
+      .replace(/women's\s*/gi, "")
+      .replace(/\s*metres?\s*/gi, "m")
+      .replace(/\s+/g, "")
       .trim();
-  };
 
-  // Enhanced matching for related events
-  const isRelatedEvent = (discipline: string, athleteEvents: string[]) => {
+  const isRelatedEvent = (discipline: string, athleteEvs: string[]) => {
     if (!discipline) return false;
     const normalizedDiscipline = normalize(discipline);
-    
-    // Check for exact or partial matches, but never cross relay/non-relay boundary
     const disciplineIsRelay = normalizedDiscipline.includes('relay');
-    const hasMatch = athleteEvents.some(event => {
-      const normalizedEvent = normalize(event);
-      if (disciplineIsRelay !== normalizedEvent.includes('relay')) return false;
-      return normalizedDiscipline.includes(normalizedEvent) ||
-             normalizedEvent.includes(normalizedDiscipline);
+    const hasMatch = athleteEvs.some(ev => {
+      const ne = normalize(ev);
+      if (disciplineIsRelay !== ne.includes('relay')) return false;
+      return normalizedDiscipline.includes(ne) || ne.includes(normalizedDiscipline);
     });
-    
     if (hasMatch) return true;
-    
-    // Special case: treat hurdles events as related regardless of distance
-    // (e.g., 110m Hurdles and 60m Hurdles are related)
-    if (normalizedDiscipline.includes('hurdles')) {
-      return athleteEvents.some(e => normalize(e).includes('hurdles'));
-    }
-    
-    // Special case: treat sprint distances as related (100m, 200m, 400m)
-    const sprintPattern = /^(100|200|400)m$/;
-    if (sprintPattern.test(normalizedDiscipline)) {
-      return athleteEvents.some(e => sprintPattern.test(normalize(e)));
-    }
-    
-    // Special case: treat middle distance events as related (800m, 1500m)
-    const middleDistancePattern = /^(800|1500)m$/;
-    if (middleDistancePattern.test(normalizedDiscipline)) {
-      return athleteEvents.some(e => middleDistancePattern.test(normalize(e)));
-    }
-    
+    if (normalizedDiscipline.includes("hurdles")) return athleteEvs.some(e => normalize(e).includes("hurdles"));
+    const sprint = /^(100|200|400)m$/;
+    if (sprint.test(normalizedDiscipline)) return athleteEvs.some(e => sprint.test(normalize(e)));
+    const mid = /^(800|1500)m$/;
+    if (mid.test(normalizedDiscipline)) return athleteEvs.some(e => mid.test(normalize(e)));
     return false;
   };
 
-  // Helper function to calculate time since PB
   const getTimeSincePB = (dateString: string | null): string => {
     if (!dateString) return "—";
-    
     try {
       const pbDate = new Date(dateString);
       const now = new Date();
-      
-      // Calculate difference in months
       let years = now.getFullYear() - pbDate.getFullYear();
       let months = now.getMonth() - pbDate.getMonth();
-      
-      if (months < 0) {
-        years--;
-        months += 12;
-      }
-      
-      // Format output
-      if (years === 0 && months === 0) {
-        return "This month";
-      } else if (years === 0) {
-        return `${months} ${months === 1 ? 'month' : 'months'}`;
-      } else if (months === 0) {
-        return `${years} ${years === 1 ? 'year' : 'years'}`;
-      } else {
-        return `${years} ${years === 1 ? 'year' : 'years'}, ${months} ${months === 1 ? 'month' : 'months'}`;
-      }
-    } catch (error) {
-      return "—";
-    }
+      if (months < 0) { years--; months += 12; }
+      if (years === 0 && months === 0) return "This month";
+      if (years === 0) return `${months} ${months === 1 ? "month" : "months"}`;
+      if (months === 0) return `${years} ${years === 1 ? "year" : "years"}`;
+      return `${years} ${years === 1 ? "year" : "years"}, ${months} ${months === 1 ? "month" : "months"}`;
+    } catch { return "—"; }
   };
 
   // Photo handlers
@@ -232,17 +250,14 @@ export default function AthleteDetail() {
     return a.localeCompare(b);
   });
 
-  // Fall back to the main event tab when nothing is explicitly selected
   const effectiveDiscipline = trendDiscipline || (trendDisciplines.length > 0 ? trendDisciplines[0] : "");
 
-  // Filter all sections by the effective discipline (main event by default)
   const disciplineFilter = effectiveDiscipline
     ? (d: string | null) => !!d && isEventMatch(d, effectiveDiscipline)
     : () => true;
 
   const filteredCompetitionResults = competitionResults.filter(r => disciplineFilter(r.discipline));
 
-  // Filter personal bests to disciplines that match the athlete's events, then apply trend filter
   const filteredPersonalBests = personalBests
     .filter(pb => pb.discipline && isRelatedEvent(pb.discipline, events))
     .filter(pb => disciplineFilter(pb.discipline))
@@ -257,13 +272,10 @@ export default function AthleteDetail() {
       return 0;
     });
 
-  // Filter honours to disciplines that match the athlete's events, then apply trend filter
   const filteredHonours = honours
     .filter(honour => honour.discipline && isRelatedEvent(honour.discipline, events))
     .filter(honour => disciplineFilter(honour.discipline));
 
-
-  // Best result per year per discipline from competition history — drives both the table and the chart
   type SeasonBestRow = { year: number; date: string; discipline: string; mark: string; numericMark: number; competition: string; wind: string | null; place: string };
   const seasonBestsByYear = Object.values(
     competitionResults
@@ -281,12 +293,8 @@ export default function AthleteDetail() {
   ).sort((a, b) => b.year - a.year || a.discipline.localeCompare(b.discipline));
 
   const chartData = [...seasonBestsByYear].sort((a, b) => a.year - b.year).map(d => ({ year: String(d.year), mark: d.numericMark, discipline: d.discipline }));
-
-  // Group by discipline for multiple line series
   const disciplineColors = ['#00A651', '#D8B365', '#f59e0b', '#ef4444', '#3b82f6'];
   const uniqueDisciplines = Array.from(new Set(chartData.map(d => d.discipline)));
-  
-  // Calculate Y-axis domain (min - 2 to max + 2)
   const marks = chartData.map(d => d.mark);
   const minMark = marks.length > 0 ? Math.min(...marks) : 0;
   const maxMark = marks.length > 0 ? Math.max(...marks) : 0;
@@ -296,8 +304,22 @@ export default function AthleteDetail() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => setLocation("/athletes")} className="p-2 rounded-lg hover:bg-muted transition-colors">
+        <button
+          onClick={() => setLocation("/athletes")}
+          className="p-2 rounded-lg hover:bg-muted transition-colors"
+        >
           <ArrowLeft size={20} className="text-muted-foreground" />
+        </button>
+        <button
+          onClick={handleDownloadReport}
+          disabled={downloadingReport}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white transition-colors shadow-sm"
+        >
+          {downloadingReport ? (
+            <><Loader2 size={15} className="animate-spin" /> Generating…</>
+          ) : (
+            <><Download size={15} /> Download Report</>
+          )}
         </button>
       </div>
 
@@ -460,13 +482,11 @@ export default function AthleteDetail() {
         </div>
       )}
 
-      {/* Personal Bests Card */}
+      {/* Personal Bests */}
       <div className="bg-card border border-border rounded-2xl p-6">
         <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-1.5">
-          <Target size={12} />
-          Personal Bests
+          <Target size={12} /> Personal Bests
         </div>
-        
         {filteredPersonalBests.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -481,7 +501,7 @@ export default function AthleteDetail() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPersonalBests.map((pb) => (
+                {filteredPersonalBests.map(pb => (
                   <tr key={pb.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                     <td className="py-3 px-2 text-muted-foreground whitespace-nowrap">{pb.date || "—"}</td>
                     <td className="py-3 px-2 text-muted-foreground">{pb.venue || "—"}</td>
@@ -565,28 +585,26 @@ export default function AthleteDetail() {
       {chartData.length > 0 && (
         <div className="bg-card border border-border rounded-2xl p-6">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-1.5">
-            <LineChart size={12} />
-            Season Bests
+            <LineChart size={12} /> Season Bests
           </div>
-          
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsLineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis 
-                  dataKey="year" 
+                <XAxis
+                  dataKey="year"
                   stroke="#9ca3af"
                   style={{ fontSize: '12px' }}
                 />
-                <YAxis 
+                <YAxis
                   stroke="#9ca3af"
                   style={{ fontSize: '12px' }}
                   domain={yAxisDomain}
                   label={{ value: 'Mark', angle: -90, position: 'insideLeft', style: { fill: '#9ca3af' } }}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1f2937', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
                     border: '1px solid #374151',
                     borderRadius: '8px',
                     color: '#f3f4f6'
@@ -594,17 +612,11 @@ export default function AthleteDetail() {
                 />
                 <Legend />
                 {uniqueDisciplines.map((discipline, idx) => (
-                  <Line
-                    key={discipline}
-                    type="monotone"
-                    dataKey="mark"
+                  <Line key={discipline} type="monotone" dataKey="mark"
                     data={chartData.filter(d => d.discipline === discipline)}
-                    name={discipline}
-                    stroke={disciplineColors[idx % disciplineColors.length]}
-                    strokeWidth={2}
-                    dot={{ fill: disciplineColors[idx % disciplineColors.length], r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
+                    name={discipline} stroke={disciplineColors[idx % disciplineColors.length]}
+                    strokeWidth={2} dot={{ fill: disciplineColors[idx % disciplineColors.length], r: 4 }}
+                    activeDot={{ r: 6 }} />
                 ))}
               </RechartsLineChart>
             </ResponsiveContainer>
@@ -612,13 +624,11 @@ export default function AthleteDetail() {
         </div>
       )}
 
-      {/* Honours/Performance Card */}
+      {/* Performance History */}
       <div className="bg-card border border-border rounded-2xl p-6">
         <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-1.5">
-          <Trophy size={12} />
-          Performance History
+          <Trophy size={12} /> Performance History
         </div>
-
         {filteredHonours.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -633,7 +643,7 @@ export default function AthleteDetail() {
                 </tr>
               </thead>
               <tbody>
-                {filteredHonours.map((honour) => (
+                {filteredHonours.map(honour => (
                   <tr key={honour.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                     <td className="py-3 px-2 text-muted-foreground whitespace-nowrap">
                       {honour.date
@@ -664,10 +674,8 @@ export default function AthleteDetail() {
       {/* Competition History */}
       <div className="bg-card border border-border rounded-2xl p-6">
         <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-1.5">
-          <TrendingUp size={12} />
-          Competition History
+          <TrendingUp size={12} /> Competition History
         </div>
-
         {filteredCompetitionResults.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -710,14 +718,14 @@ export default function AthleteDetail() {
         )}
       </div>
 
-      {/* Additional Info */}
+      {/* Data Info */}
       {athlete.scraped_at && (
         <div className="bg-card border border-border rounded-2xl p-6">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">
             Data Information
           </div>
           <div className="text-xs text-muted-foreground">
-            Last updated: {format(parseISO(athlete.scraped_at), 'MMMM d, yyyy, h:mm a')}
+            Last updated: {format(parseISO(athlete.scraped_at), "MMMM d, yyyy, h:mm a")}
           </div>
         </div>
       )}

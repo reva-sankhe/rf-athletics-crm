@@ -26,7 +26,9 @@
       "Bash(printenv)",
       "mcp__claude_ai_Supabase__list_tables",
       "Bash(npx vite *)",
-      "Bash(curl -s http://localhost:5173)"
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)"
     ]
   }
 }
