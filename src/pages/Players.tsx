@@ -18,7 +18,6 @@ import { fetchWAAthleteProfiles, getUniqueEvents, fetchWARFAthleteResults } from
 import type { WAAthleteProfile, WARFAthleteResult } from "@/lib/types";
 import { AthleteTrendCard } from "@/components/analytics/AthleteTrendCard";
 import { Users, Search, ChevronRight, ArrowUpDown, ChevronLeft, ChevronRight as ChevronRightIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default function Athletes() {
@@ -65,24 +64,13 @@ export default function Athletes() {
     },
     {
       accessorKey: "reliance_events",
-      header: "Events",
+      header: "Main Event",
       cell: ({ row }) => {
         if (!row.original.reliance_events) {
           return <span className="text-muted-foreground">—</span>;
         }
-        return (
-          <div className="flex flex-wrap gap-1">
-            {row.original.reliance_events.split(',').map((event, idx) => (
-              <Badge
-                key={idx}
-                variant="secondary"
-                className="bg-primary/10 text-primary border-primary/20"
-              >
-                {event.trim()}
-              </Badge>
-            ))}
-          </div>
-        );
+        const mainEvent = row.original.reliance_events.split(',')[0].trim();
+        return <span className="text-foreground">{mainEvent}</span>;
       },
       enableSorting: false,
     },
@@ -220,41 +208,39 @@ export default function Athletes() {
           <EmptyState icon={Users} title="No athletes found" description="Try adjusting your filters" />
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="athletes-table">
-                <thead>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id} className="border-b border-border text-xs text-muted-foreground">
-                      {headerGroup.headers.map((header) => (
-                        <th key={header.id} className="px-4 py-2.5 text-left font-medium">
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {table.getRowModel().rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="border-b border-border/50 hover:bg-muted/30 transition-colors"
-                      data-testid={`row-athlete-${row.original.aa_athlete_id}`}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-2.5">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <table className="w-full text-sm" data-testid="athletes-table">
+              <thead>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id} className="border-b border-border text-xs text-muted-foreground">
+                    {headerGroup.headers.map((header) => (
+                      <th key={header.id} className="px-3 py-2 text-left font-medium">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                {table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-border/50 hover:bg-muted/30 transition-colors"
+                    data-testid={`row-athlete-${row.original.aa_athlete_id}`}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-3 py-2">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-border">

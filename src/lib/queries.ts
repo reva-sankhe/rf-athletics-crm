@@ -262,7 +262,22 @@ export async function fetchAthleteRankings(athleteName: string): Promise<WARanki
     .select("*")
     .ilike("athlete_name", athleteName)
     .order("rank");
-  
+
+  if (error) throw error;
+  return data as WARanking[];
+}
+
+// Fetch all rankings for given event groups (used to compute India rank)
+export async function fetchRankingsByEventGroups(eventGroups: string[], country?: string): Promise<WARanking[]> {
+  if (eventGroups.length === 0) return [];
+  let query = supabase
+    .from("wa_rankings")
+    .select("*")
+    .in("event_group", eventGroups)
+    .order("event_group")
+    .order("rank");
+  if (country) query = query.eq("country", country);
+  const { data, error } = await query;
   if (error) throw error;
   return data as WARanking[];
 }

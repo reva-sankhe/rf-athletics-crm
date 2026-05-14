@@ -1,21 +1,53 @@
 import { useState, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents, fetchAthleteRankings, fetchWARFAthleteResults, fetchWAAthleteSeasonBests, uploadAthletePhoto, deleteAthletePhoto } from "@/lib/queries";
+import { fetchWAAthleteProfile, fetchWAAthleteHonours, fetchWAAthletePersonalBests, fetchAthleteEvents, fetchPersonalBestsForAthleteEvents, fetchAthleteRankings, fetchRankingsByEventGroups, fetchWARFAthleteResults, uploadAthletePhoto, deleteAthletePhoto } from "@/lib/queries";
 import { AthleteTrendCard } from "@/components/analytics/AthleteTrendCard";
 import { Skeleton } from "@/components/Skeleton";
-import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking, WARFAthleteResult, WAAthleteSeasonBest } from "@/lib/types";
-import { isEventMatch } from "@/lib/eventUtils";
-import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart, X, Upload, Trash2 } from "lucide-react";
+import type { WAAthleteProfile, WAAthleteHonour, WAAthletePersonalBest, AthleteEvent, PersonalBestWithEvent, WARanking, WARFAthleteResult } from "@/lib/types";
+import { isEventMatch, classifyEvent } from "@/lib/eventUtils";
+import { ArrowLeft, Calendar, Flag, User2, Trophy, Target, TrendingUp, Globe, LineChart, Upload, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
+
+function stripGender(s: string | null | undefined): string {
+  if (!s) return "—";
+  return s.replace(/^(Women's|Men's)\s+/i, "");
+}
+
+function parseMarkNumeric(mark: string, isTimeBased: boolean): number {
+  const clean = mark.replace(/[^0-9.:]/g, "");
+  if (!isTimeBased) return parseFloat(clean);
+  const parts = clean.split(":");
+  if (parts.length === 3) return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+  if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+  return parseFloat(parts[0]);
+}
+
+function PlaceBadge({ place }: { place: string }) {
+  const p = place.toLowerCase();
+  const isGold   = place === "1" || place === "1." || p.includes("gold")   || p.includes("1st");
+  const isSilver = place === "2" || place === "2." || p.includes("silver") || p.includes("2nd");
+  const isBronze = place === "3" || place === "3." || p.includes("bronze") || p.includes("3rd");
+  const cls = isGold
+    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+    : isSilver
+    ? "bg-gray-400/20 text-gray-300 border-gray-400/30"
+    : isBronze
+    ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+    : "bg-muted text-muted-foreground border-border";
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${cls}`}>
+      {place}
+    </span>
+  );
+}
 
 export default function AthleteDetail() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedEventFilters, setSelectedEventFilters] = useState<Set<string>>(new Set());
   const [trendDiscipline, setTrendDiscipline] = useState<string>("");
   const [photoUploading, setPhotoUploading] = useState(false);
 
@@ -28,6 +60,11 @@ export default function AthleteDetail() {
     queryKey: ["athlete-rankings", athlete?.reliance_name],
     queryFn: () => fetchAthleteRankings(athlete!.reliance_name!),
     enabled: !!athlete?.reliance_name,
+  });
+  const { data: indiaRankings = [] } = useQuery<WARanking[]>({
+    queryKey: ["india-rankings", rankings.map(r => r.event_group).join(",")],
+    queryFn: () => fetchRankingsByEventGroups(rankings.map(r => r.event_group), "IND"),
+    enabled: rankings.length > 0,
   });
   const { data: athleteEvents = [] } = useQuery<AthleteEvent[]>({
     queryKey: ["athlete-events", id],
@@ -52,11 +89,6 @@ export default function AthleteDetail() {
   const { data: rawResults = [], isLoading: resultsLoading } = useQuery<WARFAthleteResult[]>({
     queryKey: ["athlete-rf-results", id],
     queryFn: () => fetchWARFAthleteResults(id!, 200),
-    enabled: !!id,
-  });
-  const { data: seasonBests = [] } = useQuery<WAAthleteSeasonBest[]>({
-    queryKey: ["athlete-season-bests", id],
-    queryFn: () => fetchWAAthleteSeasonBests(id!),
     enabled: !!id,
   });
 
@@ -159,33 +191,6 @@ export default function AthleteDetail() {
     }
   };
 
-  // Strict event matching function for filtering (no related events logic)
-  const isStrictEventMatch = (discipline: string, selectedEvents: Set<string>) => {
-    if (selectedEvents.size === 0) return true; // No filter, show all
-    const normalizedDiscipline = normalize(discipline);
-    return Array.from(selectedEvents).some(event => 
-      normalizedDiscipline === normalize(event)
-    );
-  };
-
-  // Toggle event filter
-  const toggleEventFilter = (eventName: string) => {
-    setSelectedEventFilters(prev => {
-      const next = new Set(prev);
-      if (next.has(eventName)) {
-        next.delete(eventName);
-      } else {
-        next.add(eventName);
-      }
-      return next;
-    });
-  };
-
-  // Clear all event filters
-  const clearEventFilters = () => {
-    setSelectedEventFilters(new Set());
-  };
-
   // Photo handlers
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -211,66 +216,71 @@ export default function AthleteDetail() {
     }
   }
 
-  // Season best lookup — matches WA discipline format ("100 Metres") to PB format ("Women's 100m")
-  function getSeasonBest(pbDiscipline: string | null): WAAthleteSeasonBest | undefined {
-    if (!pbDiscipline) return undefined;
-    return seasonBests.find(sb => isEventMatch(sb.discipline, pbDiscipline));
-  }
+  // Discipline tabs — sorted: main event first, then alphabetical
+  const trendDisciplines = Array.from(
+    new Set(competitionResults.map(r => r.discipline).filter(Boolean))
+  ) as string[];
 
-  // Competition results filtered by global event filter
-  const filteredCompetitionResults = competitionResults.filter(r =>
-    selectedEventFilters.size === 0 ||
-    Array.from(selectedEventFilters).some(ev => isEventMatch(r.discipline, ev))
-  );
+  const mainAthleteEvent = athleteEvents.find(ae => ae.is_main_event)?.event_name ?? "";
+  const mainEventDiscipline = mainAthleteEvent
+    ? trendDisciplines.find(d => isEventMatch(d, mainAthleteEvent)) ?? ""
+    : "";
 
-  // Filter personal bests to only show disciplines that match the athlete's events
+  trendDisciplines.sort((a, b) => {
+    if (a === mainEventDiscipline) return -1;
+    if (b === mainEventDiscipline) return 1;
+    return a.localeCompare(b);
+  });
+
+  // Fall back to the main event tab when nothing is explicitly selected
+  const effectiveDiscipline = trendDiscipline || (trendDisciplines.length > 0 ? trendDisciplines[0] : "");
+
+  // Filter all sections by the effective discipline (main event by default)
+  const disciplineFilter = effectiveDiscipline
+    ? (d: string | null) => !!d && isEventMatch(d, effectiveDiscipline)
+    : () => true;
+
+  const filteredCompetitionResults = competitionResults.filter(r => disciplineFilter(r.discipline));
+
+  // Filter personal bests to disciplines that match the athlete's events, then apply trend filter
   const filteredPersonalBests = personalBests
     .filter(pb => pb.discipline && isRelatedEvent(pb.discipline, events))
-    .filter(pb => isStrictEventMatch(pb.discipline || '', selectedEventFilters))
+    .filter(pb => disciplineFilter(pb.discipline))
     .sort((a, b) => {
-      // Get main event names
       const mainEventNames = athleteEvents
         .filter(ae => ae.is_main_event)
         .map(ae => ae.event_name.toLowerCase().trim());
-      
-      // Check if each PB discipline matches a main event
-      const aIsMain = mainEventNames.some(mainEvent => 
-        a.discipline && isRelatedEvent(a.discipline, [mainEvent])
-      );
-      const bIsMain = mainEventNames.some(mainEvent => 
-        b.discipline && isRelatedEvent(b.discipline, [mainEvent])
-      );
-      
-      // Sort main event first
+      const aIsMain = mainEventNames.some(mainEvent => a.discipline && isRelatedEvent(a.discipline, [mainEvent]));
+      const bIsMain = mainEventNames.some(mainEvent => b.discipline && isRelatedEvent(b.discipline, [mainEvent]));
       if (aIsMain && !bIsMain) return -1;
       if (!aIsMain && bIsMain) return 1;
       return 0;
     });
 
-  // Filter honours to only show disciplines that match the athlete's events
+  // Filter honours to disciplines that match the athlete's events, then apply trend filter
   const filteredHonours = honours
     .filter(honour => honour.discipline && isRelatedEvent(honour.discipline, events))
-    .filter(honour => isStrictEventMatch(honour.discipline || '', selectedEventFilters));
+    .filter(honour => disciplineFilter(honour.discipline));
 
-  // Prepare chart data from filtered honours - group by year and get best performance
-  const chartDataByYear = filteredHonours
-    .filter(h => h.date && h.mark && h.discipline)
-    .map(h => ({
-      year: new Date(h.date!).getFullYear().toString(),
-      mark: parseFloat(h.mark!.replace(/[^0-9.]/g, '')),
-      discipline: h.discipline!,
-      fullDate: new Date(h.date!).getTime()
-    }))
-    .filter(d => !isNaN(d.mark) && !isNaN(d.fullDate))
-    .reduce((acc, curr) => {
-      const key = `${curr.year}-${curr.discipline}`;
-      if (!acc[key] || curr.mark < acc[key].mark) {
-        acc[key] = curr;
-      }
-      return acc;
-    }, {} as Record<string, { year: string; mark: number; discipline: string; fullDate: number }>);
 
-  const chartData = Object.values(chartDataByYear).sort((a, b) => parseInt(a.year) - parseInt(b.year));
+  // Best result per year per discipline from competition history — drives both the table and the chart
+  type SeasonBestRow = { year: number; date: string; discipline: string; mark: string; numericMark: number; competition: string; wind: string | null; place: string };
+  const seasonBestsByYear = Object.values(
+    competitionResults
+      .filter(r => r.discipline && r.mark && isRelatedEvent(r.discipline, events) && disciplineFilter(r.discipline))
+      .reduce((acc, r) => {
+        const year = new Date(r.date).getFullYear();
+        const isTime = classifyEvent(r.discipline)?.direction === "lower_better";
+        const numericMark = parseMarkNumeric(r.mark, isTime ?? false);
+        if (isNaN(numericMark)) return acc;
+        const key = `${year}-${r.discipline}`;
+        const isBetter = !acc[key] || (isTime ? numericMark < acc[key].numericMark : numericMark > acc[key].numericMark);
+        if (isBetter) acc[key] = { year, date: r.date, discipline: r.discipline, mark: r.mark, numericMark, competition: r.competition, wind: r.wind ?? null, place: r.place ?? "" };
+        return acc;
+      }, {} as Record<string, SeasonBestRow>)
+  ).sort((a, b) => b.year - a.year || a.discipline.localeCompare(b.discipline));
+
+  const chartData = [...seasonBestsByYear].sort((a, b) => a.year - b.year).map(d => ({ year: String(d.year), mark: d.numericMark, discipline: d.discipline }));
 
   // Group by discipline for multiple line series
   const disciplineColors = ['#00A651', '#D8B365', '#f59e0b', '#ef4444', '#3b82f6'];
@@ -289,267 +299,166 @@ export default function AthleteDetail() {
         <button onClick={() => setLocation("/athletes")} className="p-2 rounded-lg hover:bg-muted transition-colors">
           <ArrowLeft size={20} className="text-muted-foreground" />
         </button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">{athlete.reliance_name}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Athlete ID: {athlete.aa_athlete_id}
-          </p>
-        </div>
       </div>
 
       {/* Athlete Info Card */}
       <div className="bg-card border border-border rounded-2xl p-6">
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4">Athlete Information</div>
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
 
-        <div className="flex gap-6">
+        {/* Top row: photo | name + badges | rankings */}
+        <div className="flex gap-5 mb-5">
+
           {/* Photo */}
-          <div className="shrink-0">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handlePhotoUpload}
-            />
-            <div className="relative group w-20 h-20">
-              {athlete.photo_url ? (
-                <img
-                  src={athlete.photo_url}
-                  alt={athlete.reliance_name}
-                  className="w-20 h-20 rounded-xl object-cover border border-border"
-                />
+          <div className="relative group shrink-0 w-[88px] h-[88px]">
+            {athlete.photo_url ? (
+              <img src={athlete.photo_url} alt={athlete.reliance_name} className="w-full h-full rounded-2xl object-cover border border-border" />
+            ) : (
+              <div className="w-full h-full rounded-2xl border border-border bg-muted flex items-center justify-center">
+                <User2 size={36} className="text-muted-foreground" />
+              </div>
+            )}
+            <div className={`absolute inset-0 rounded-2xl bg-black/55 flex items-center justify-center gap-2 transition-opacity ${photoUploading ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+              {photoUploading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
-                <div className="w-20 h-20 rounded-xl border border-border bg-muted flex items-center justify-center">
-                  <User2 size={32} className="text-muted-foreground" />
-                </div>
-              )}
-              {/* Hover overlay */}
-              <div className={`absolute inset-0 rounded-xl bg-black/50 flex items-center justify-center gap-2 transition-opacity ${photoUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                {photoUploading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
-                      title="Upload photo"
-                    >
-                      <Upload size={14} />
+                <>
+                  <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors" title="Upload photo">
+                    <Upload size={13} />
+                  </button>
+                  {athlete.photo_url && (
+                    <button onClick={handlePhotoDelete} className="p-1.5 rounded-lg bg-white/20 hover:bg-red-500/70 text-white transition-colors" title="Delete photo">
+                      <Trash2 size={13} />
                     </button>
-                    {athlete.photo_url && (
-                      <button
-                        onClick={handlePhotoDelete}
-                        className="p-1.5 rounded-lg bg-white/20 hover:bg-red-500/70 text-white transition-colors"
-                        title="Delete photo"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Info grid */}
-          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
-                <User2 size={12} />
-                Name
-              </div>
-              <div className="text-lg font-semibold text-foreground">{athlete.reliance_name || "—"}</div>
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
-                <Calendar size={12} />
-                Age
-              </div>
-              <div className="text-lg font-semibold text-foreground">{athlete.age ?? "—"}</div>
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Gender</div>
-              <div className="text-lg font-semibold text-foreground">
-                {athlete.gender === "M" ? "Male" : athlete.gender === "F" ? "Female" : athlete.gender || "—"}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
-                <Flag size={12} />
-                Nationality
-              </div>
-              <div className="text-lg font-semibold text-foreground">{athlete.nationality || "—"}</div>
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Birth Date</div>
-              <div className="text-lg font-semibold text-foreground">
-                {athlete.birth_date ? format(parseISO(athlete.birth_date), 'MMMM d, yyyy') : "—"}
-              </div>
-            </div>
-
-            <div className="sm:col-span-2 lg:col-span-3">
-              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
-                <Globe size={12} />
-                Current Rankings
-              </div>
-              <div className="text-lg font-semibold text-foreground">
-                {rankings.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {rankings.map((ranking, idx) => (
-                      <span key={idx} className="inline-flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground font-normal">
-                          {ranking.event_group.replace('/', ' - ').replace('-', ' ')}:
-                        </span>
-                        <span className="font-bold text-indigo-400">#{ranking.rank}</span>
-                        <span className="text-xs text-muted-foreground">({ranking.ranking_score} pts)</span>
-                      </span>
-                    ))}
-                  </div>
-                ) : "—"}
-              </div>
-            </div>
-
-            <div className="sm:col-span-2 lg:col-span-4">
-              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
-                <Target size={12} />
-                Events
-              </div>
-              {(events.length > 0 || athleteEvents.length > 0) ? (
-                <div className="flex flex-wrap items-start gap-6">
-                  {athleteEvents.filter(ae => ae.is_main_event).length > 0 && (
-                    <div>
-                      <div className="text-[10px] font-semibold text-emerald-400 mb-1.5">Main Event</div>
-                      <div className="flex flex-wrap gap-2">
-                        {athleteEvents.filter(ae => ae.is_main_event).map((ae, idx) => (
-                          <span key={idx} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-500/20 border border-emerald-500/50 text-emerald-300">
-                            {ae.event_name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
                   )}
-                  {(() => {
-                    const mainNames = athleteEvents.filter(ae => ae.is_main_event).map(ae => ae.event_name.toLowerCase().trim());
-                    const others = events.filter(e => !mainNames.includes(e.toLowerCase().trim()));
-                    return others.length > 0 ? (
-                      <div>
-                        <div className="text-[10px] font-semibold text-indigo-400 mb-1.5">Other Events</div>
-                        <div className="flex flex-wrap gap-2">
-                          {others.map((event, idx) => (
-                            <span key={idx} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-500/15 border border-indigo-500/30 text-indigo-400">
-                              {event}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-              ) : (
-                <div className="text-lg font-semibold text-foreground">—</div>
+                </>
               )}
             </div>
           </div>
+
+          {/* Name + quick-fact badges */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-2xl font-bold text-foreground leading-tight truncate">{athlete.reliance_name}</h2>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {athlete.nationality && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium bg-muted border border-border px-2 py-1 rounded-md text-foreground">
+                  <Flag size={10} className="text-muted-foreground" /> {athlete.nationality}
+                </span>
+              )}
+              {athlete.gender && (
+                <span className="inline-flex items-center text-xs font-medium bg-muted border border-border px-2 py-1 rounded-md text-foreground">
+                  {athlete.gender === "M" ? "Male" : athlete.gender === "F" ? "Female" : athlete.gender}
+                </span>
+              )}
+              {athlete.age != null && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium bg-muted border border-border px-2 py-1 rounded-md text-foreground">
+                  <Calendar size={10} className="text-muted-foreground" /> Age {athlete.age}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {athlete.birth_date && <>Born {format(parseISO(athlete.birth_date), 'MMMM d, yyyy')} · </>}
+              ID: {athlete.aa_athlete_id}
+            </p>
+          </div>
+
+          {/* Rankings — top right, big numbers */}
+          {rankings.length > 0 && (
+            <div className="shrink-0 flex gap-5 items-start">
+              {rankings.map((ranking, idx) => {
+                const eventIndia = indiaRankings
+                  .filter(r => r.event_group === ranking.event_group)
+                  .sort((a, b) => a.rank - b.rank);
+                const indiaRankIdx = eventIndia.findIndex(
+                  r => r.athlete_name.toLowerCase() === ranking.athlete_name.toLowerCase()
+                );
+                const indiaRank = indiaRankIdx >= 0 ? indiaRankIdx + 1 : null;
+                return (
+                  <div key={idx} className="text-right">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+                      {ranking.event_group.replace('/', ' / ')}
+                    </p>
+                    <div className="flex gap-4 items-start justify-end">
+                      <div>
+                        <p className="text-2xl font-bold text-indigo-400 leading-none">#{ranking.rank}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">World</p>
+                        <p className="text-[10px] text-muted-foreground">{ranking.ranking_score} pts</p>
+                      </div>
+                      {indiaRank !== null && (
+                        <div>
+                          <p className="text-2xl font-bold text-amber-400 leading-none">#{indiaRank}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">India</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
         </div>
+
+        {/* Divider */}
+        <div className="border-t border-border" />
+
+        {/* Bottom row: events */}
+        {(events.length > 0 || athleteEvents.length > 0) && (
+          <div className="pt-4">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Events</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-foreground">
+              {(() => {
+                const mainNames = new Set(athleteEvents.filter(ae => ae.is_main_event).map(ae => ae.event_name.toLowerCase().trim()));
+                const allEvents = [
+                  ...athleteEvents.filter(ae => ae.is_main_event).map(ae => ({ name: ae.event_name, isMain: true })),
+                  ...events.filter(e => !mainNames.has(e.toLowerCase().trim())).map(e => ({ name: e, isMain: false })),
+                ];
+                return allEvents.map((ev, idx) => (
+                  <span key={idx} className="flex items-center gap-1.5">
+                    {idx > 0 && <span className="text-border select-none">|</span>}
+                    {ev.isMain && <span className="text-amber-400 text-xs">★</span>}
+                    <span className={ev.isMain ? "font-medium text-foreground" : "text-muted-foreground"}>
+                      {ev.name}
+                    </span>
+                  </span>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
       </div>
 
-      {/* Global Event Filter — applies to all sections below */}
-      {(athleteEvents.length > 0) && (
-        <div className="bg-card border border-border rounded-2xl px-5 py-4 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground shrink-0">Filter by Event</span>
-          <div className="flex flex-wrap gap-2">
-            {athleteEvents.filter(ae => ae.is_main_event).map((ae, idx) => {
-              const active = selectedEventFilters.has(ae.event_name);
-              return (
+      {/* Performance Trends — discipline tabs act as the global page filter */}
+      {trendDisciplines.length > 0 && (
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+              <TrendingUp size={12} />
+              Performance Trends
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {trendDisciplines.map(disc => (
                 <button
-                  key={idx}
-                  onClick={() => toggleEventFilter(ae.event_name)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:scale-105 ${
-                    active
-                      ? 'bg-emerald-500/40 border-2 border-emerald-400 text-emerald-200 shadow-lg shadow-emerald-500/30'
-                      : 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
+                  key={disc}
+                  onClick={() => setTrendDiscipline(prev => prev === disc ? "" : disc)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    disc === effectiveDiscipline
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {ae.event_name}
+                  {disc}
                 </button>
-              );
-            })}
-            {(() => {
-              const mainNames = athleteEvents.filter(ae => ae.is_main_event).map(ae => ae.event_name.toLowerCase().trim());
-              return events.filter(e => !mainNames.includes(e.toLowerCase().trim())).map((event, idx) => {
-                const active = selectedEventFilters.has(event);
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => toggleEventFilter(event)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:scale-105 ${
-                      active
-                        ? 'bg-indigo-500/40 border-2 border-indigo-400 text-indigo-200 shadow-lg shadow-indigo-500/30'
-                        : 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-400'
-                    }`}
-                  >
-                    {event}
-                  </button>
-                );
-              });
-            })()}
+              ))}
+            </div>
           </div>
-          {selectedEventFilters.size > 0 && (
-            <button
-              onClick={clearEventFilters}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 border border-amber-500/50 text-amber-300 hover:bg-amber-500/30 transition-colors ml-auto"
-            >
-              <X size={12} />
-              Clear filter
-            </button>
-          )}
+          <AthleteTrendCard
+            athleteName={athlete.reliance_name || athlete.aa_athlete_id}
+            results={filteredCompetitionResults}
+            discipline={effectiveDiscipline}
+          />
         </div>
       )}
-
-      {/* Performance Trends */}
-      {(() => {
-        const trendDisciplines = Array.from(
-          new Set(filteredCompetitionResults.map(r => r.discipline).filter(Boolean))
-        ).sort();
-        if (trendDisciplines.length === 0) return null;
-        const activeDiscipline = trendDiscipline || trendDisciplines[0];
-        return (
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <TrendingUp size={12} />
-                Performance Trends
-              </div>
-              {trendDisciplines.length > 1 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {trendDisciplines.map(disc => (
-                    <button
-                      key={disc}
-                      onClick={() => setTrendDiscipline(disc)}
-                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                        disc === activeDiscipline
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {disc}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <AthleteTrendCard
-              athleteName={athlete.reliance_name || athlete.aa_athlete_id}
-              results={filteredCompetitionResults}
-              discipline={activeDiscipline}
-            />
-          </div>
-        );
-      })()}
 
       {/* Personal Bests Card */}
       <div className="bg-card border border-border rounded-2xl p-6">
@@ -558,57 +467,36 @@ export default function AthleteDetail() {
           Personal Bests
         </div>
         
-        {/* Filter indicator */}
-        {selectedEventFilters.size > 0 && (
-          <div className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-            <div className="text-xs text-amber-300 font-medium">
-              Showing data for: {Array.from(selectedEventFilters).join(', ')}
-            </div>
-          </div>
-        )}
-        
         {filteredPersonalBests.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Discipline</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">PB</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Season Best</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Venue</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Date</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Time Since PB</th>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="text-left py-3 px-2">Date</th>
+                  <th className="text-left py-3 px-2">Venue</th>
+                  <th className="text-left py-3 px-2">Event</th>
+                  <th className="text-right py-3 px-2">Mark</th>
+                  <th className="text-right py-3 px-2">Wind</th>
+                  <th className="text-left py-3 px-2">Time Since PB</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredPersonalBests.map((pb) => {
-                  const sb = getSeasonBest(pb.discipline);
-                  const sbIsPB = sb && sb.mark === pb.mark;
-                  return (
-                    <tr key={pb.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                      <td className="py-3 px-2 text-sm font-semibold text-foreground">{pb.discipline || "—"}</td>
-                      <td className="py-3 px-2 text-sm">
-                        <span className="font-mono font-bold text-foreground">{pb.mark || "—"}</span>
-                      </td>
-                      <td className="py-3 px-2 text-sm">
-                        {sb ? (
-                          <div className="flex flex-col">
-                            <span className={`font-mono font-semibold ${sbIsPB ? 'text-emerald-400' : 'text-foreground'}`}>
-                              {sb.mark}
-                              {sbIsPB && <span className="ml-1 text-[10px] text-emerald-400 font-normal">= PB</span>}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">{sb.date}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-2 text-sm text-muted-foreground">{pb.venue || "—"}</td>
-                      <td className="py-3 px-2 text-sm text-foreground">{pb.date || "—"}</td>
-                      <td className="py-3 px-2 text-sm text-muted-foreground">{getTimeSincePB(pb.date)}</td>
-                    </tr>
-                  );
-                })}
+                {filteredPersonalBests.map((pb) => (
+                  <tr key={pb.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                    <td className="py-3 px-2 text-muted-foreground whitespace-nowrap">{pb.date || "—"}</td>
+                    <td className="py-3 px-2 text-muted-foreground">{pb.venue || "—"}</td>
+                    <td className="py-3 px-2">
+                      <span className="px-2 py-0.5 rounded border border-border text-xs text-muted-foreground">
+                        {stripGender(pb.discipline)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-right">
+                      <span className="font-mono font-bold text-foreground">{pb.mark || "—"}</span>
+                    </td>
+                    <td className="py-3 px-2 text-right text-muted-foreground">{pb.wind || "—"}</td>
+                    <td className="py-3 px-2 text-muted-foreground">{getTimeSincePB(pb.date)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -617,22 +505,69 @@ export default function AthleteDetail() {
         )}
       </div>
 
-      {/* Performance Chart */}
+      {/* Season Bests Card */}
+      <div className="bg-card border border-border rounded-2xl p-6">
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-1.5">
+          <Target size={12} />
+          Season Bests
+        </div>
+
+        {seasonBestsByYear.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="text-left py-3 px-2">Date</th>
+                  <th className="text-left py-3 px-2">Competition</th>
+                  <th className="text-left py-3 px-2">Event</th>
+                  <th className="text-right py-3 px-2">Mark</th>
+                  <th className="text-right py-3 px-2">Wind</th>
+                  <th className="text-center py-3 px-2">Place</th>
+                </tr>
+              </thead>
+              <tbody>
+                {seasonBestsByYear.map((sb, i) => {
+                  const pb = personalBests.find(p => p.discipline && isEventMatch(p.discipline, sb.discipline));
+                  const sbIsPB = pb && pb.mark === sb.mark;
+                  return (
+                    <tr key={i} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-2 text-muted-foreground whitespace-nowrap">
+                        {new Date(sb.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                      </td>
+                      <td className="py-3 px-2 max-w-[200px] truncate text-foreground">{sb.competition || "—"}</td>
+                      <td className="py-3 px-2">
+                        <span className="px-2 py-0.5 rounded border border-border text-xs text-muted-foreground">
+                          {stripGender(sb.discipline)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-right">
+                        <span className={`font-mono font-bold ${sbIsPB ? "text-emerald-400" : "text-foreground"}`}>
+                          {sb.mark}
+                        </span>
+                        {sbIsPB && <span className="ml-1.5 text-[10px] text-emerald-400 font-normal">= PB</span>}
+                      </td>
+                      <td className="py-3 px-2 text-right text-muted-foreground">{sb.wind || "—"}</td>
+                      <td className="py-3 px-2 text-center">
+                        {sb.place ? <PlaceBadge place={sb.place} /> : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-muted-foreground">No season bests recorded</p>
+        )}
+      </div>
+
+      {/* Season Bests Chart */}
       {chartData.length > 0 && (
         <div className="bg-card border border-border rounded-2xl p-6">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-1.5">
             <LineChart size={12} />
             Season Bests
           </div>
-          
-          {/* Filter indicator */}
-          {selectedEventFilters.size > 0 && (
-            <div className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-              <div className="text-xs text-amber-300 font-medium">
-                Showing data for: {Array.from(selectedEventFilters).join(', ')}
-              </div>
-            </div>
-          )}
           
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -647,7 +582,7 @@ export default function AthleteDetail() {
                   stroke="#9ca3af"
                   style={{ fontSize: '12px' }}
                   domain={yAxisDomain}
-                  label={{ value: 'Mark (seconds)', angle: -90, position: 'insideLeft', style: { fill: '#9ca3af' } }}
+                  label={{ value: 'Mark', angle: -90, position: 'insideLeft', style: { fill: '#9ca3af' } }}
                 />
                 <Tooltip 
                   contentStyle={{ 
@@ -683,45 +618,39 @@ export default function AthleteDetail() {
           <Trophy size={12} />
           Performance History
         </div>
-        
+
         {filteredHonours.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Date</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Category</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Competition</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Event</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Place</th>
-                  <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground">Mark</th>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="text-left py-3 px-2">Date</th>
+                  <th className="text-left py-3 px-2">Competition</th>
+                  <th className="text-left py-3 px-2">Category</th>
+                  <th className="text-left py-3 px-2">Event</th>
+                  <th className="text-right py-3 px-2">Mark</th>
+                  <th className="text-center py-3 px-2">Place</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredHonours.map((honour) => (
                   <tr key={honour.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                    <td className="py-3 px-2 text-sm font-medium text-foreground">
-                      {honour.date || "—"}
+                    <td className="py-3 px-2 text-muted-foreground whitespace-nowrap">
+                      {honour.date
+                        ? new Date(honour.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                        : "—"}
                     </td>
-                    <td className="py-3 px-2 text-sm text-foreground">{honour.category_name || "—"}</td>
-                    <td className="py-3 px-2 text-sm text-foreground">{honour.competition || "—"}</td>
-                    <td className="py-3 px-2 text-sm text-muted-foreground">{honour.discipline || "—"}</td>
-                    <td className="py-3 px-2 text-sm">
-                      {honour.place ? (
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          honour.place === "1." || honour.place.toLowerCase().includes("gold") || honour.place.toLowerCase().includes("1st")
-                            ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
-                            : honour.place === "2." || honour.place.toLowerCase().includes("silver") || honour.place.toLowerCase().includes("2nd")
-                            ? "bg-gray-400/20 text-gray-300 border border-gray-400/30"
-                            : honour.place === "3." || honour.place.toLowerCase().includes("bronze") || honour.place.toLowerCase().includes("3rd")
-                            ? "bg-orange-500/20 text-orange-400 border border-orange-500/30"
-                            : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                        }`}>
-                          {honour.place}
-                        </span>
-                      ) : "—"}
+                    <td className="py-3 px-2 max-w-[200px] truncate text-foreground">{honour.competition || "—"}</td>
+                    <td className="py-3 px-2 text-muted-foreground">{honour.category_name || "—"}</td>
+                    <td className="py-3 px-2">
+                      <span className="px-2 py-0.5 rounded border border-border text-xs text-muted-foreground">
+                        {stripGender(honour.discipline)}
+                      </span>
                     </td>
-                    <td className="py-3 px-2 text-sm font-mono text-foreground">{honour.mark || "—"}</td>
+                    <td className="py-3 px-2 text-right font-mono text-foreground">{honour.mark || "—"}</td>
+                    <td className="py-3 px-2 text-center">
+                      {honour.place ? <PlaceBadge place={honour.place} /> : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -746,7 +675,7 @@ export default function AthleteDetail() {
                 <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="text-left py-3 px-2">Date</th>
                   <th className="text-left py-3 px-2">Competition</th>
-                  <th className="text-left py-3 px-2">Discipline</th>
+                  <th className="text-left py-3 px-2">Event</th>
                   <th className="text-right py-3 px-2">Mark</th>
                   <th className="text-right py-3 px-2">Score</th>
                   <th className="text-center py-3 px-2">Place</th>
@@ -761,12 +690,14 @@ export default function AthleteDetail() {
                     <td className="py-3 px-2 max-w-[200px] truncate text-foreground">{r.competition}</td>
                     <td className="py-3 px-2">
                       <span className="px-2 py-0.5 rounded border border-border text-xs text-muted-foreground">
-                        {r.discipline}
+                        {stripGender(r.discipline)}
                       </span>
                     </td>
                     <td className="py-3 px-2 text-right font-mono text-foreground">{r.mark}</td>
                     <td className="py-3 px-2 text-right font-semibold text-foreground">{r.result_score}</td>
-                    <td className="py-3 px-2 text-center text-muted-foreground">{r.place || "—"}</td>
+                    <td className="py-3 px-2 text-center">
+                      {r.place ? <PlaceBadge place={r.place} /> : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
