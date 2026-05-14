@@ -213,8 +213,10 @@ export function GlobalStandingsTab() {
   // Use the WA rank from the database (same value shown in the bar chart) for consistency
   const bestRFRank = bestRF?.rank ?? null;
   const leader = sortedByMark[0];
-  const rfScoreGap = bestRF && leader
-    ? (parseInt(leader.score) || 0) - (parseInt(bestRF.score) || 0)
+  const leaderScore = parseInt(leader?.score) || 0;
+  const rfScore = bestRF ? (parseInt(bestRF.score) || 0) : 0;
+  const rfScoreGap = bestRF && leader && leaderScore > 0
+    ? (((leaderScore - rfScore) / leaderScore) * 100).toFixed(1)
     : null;
 
   // Full rankings table (sorted by selected mode)
@@ -265,8 +267,8 @@ export function GlobalStandingsTab() {
               <p className="text-xs text-muted-foreground leading-none mb-0.5">Score Gap to Leader</p>
               {rfScoreGap !== null ? (
                 <p className="text-lg font-bold text-amber-500 leading-none">
-                  {rfScoreGap}
-                  <span className="text-xs font-normal text-muted-foreground ml-1.5">pts behind #1</span>
+                  {rfScoreGap}%
+                  <span className="text-xs font-normal text-muted-foreground ml-1.5">behind #1</span>
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">—</p>

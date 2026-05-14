@@ -167,6 +167,34 @@ export async function fetchWAAthleteIdMaps(): Promise<WAAthleteIdMap[]> {
   return data as WAAthleteIdMap[];
 }
 
+// Athlete photo upload / delete
+export async function uploadAthletePhoto(athleteId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop();
+  const path = `${athleteId}/photo.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from('athlete-photos')
+    .upload(path, file, { upsert: true });
+  if (uploadError) throw uploadError;
+  const { data } = supabase.storage.from('athlete-photos').getPublicUrl(path);
+  const photoUrl = data.publicUrl;
+  const { error: updateError } = await supabase
+    .from('wa_athlete_profiles')
+    .update({ photo_url: photoUrl })
+    .eq('aa_athlete_id', athleteId);
+  if (updateError) throw updateError;
+  return photoUrl;
+}
+
+export async function deleteAthletePhoto(athleteId: string, photoUrl: string): Promise<void> {
+  const marker = '/athlete-photos/';
+  const path = photoUrl.includes(marker) ? photoUrl.split(marker)[1] : photoUrl;
+  await supabase.storage.from('athlete-photos').remove([path]);
+  await supabase
+    .from('wa_athlete_profiles')
+    .update({ photo_url: null })
+    .eq('aa_athlete_id', athleteId);
+}
+
 // WA Athlete Season Bests
 export async function fetchWAAthleteSeasonBests(athleteId: string): Promise<WAAthleteSeasonBest[]> {
   const { data, error } = await supabase
